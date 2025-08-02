@@ -17,6 +17,8 @@ export interface QuestTemplate {
   durationDays: number
   tasks: QuestTask[]
   rewards?: { points: number }
+  orderIndex?: number
+  isAssessment?: boolean
 }
 
 /** Numeric-keyed progress map—task ID → bool | count */

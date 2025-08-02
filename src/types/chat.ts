@@ -11,6 +11,13 @@ export interface ChatRequestBody {
   reset?: boolean
   /** 'supportive' | 'motivational' | & | 'default' */
   personality?: string
+  profile?: {
+    goals?: string
+    personality?: string
+    bigFive?: Record<string, number>
+    values?: string[]
+    attachmentStyle?: string
+  }
 }
 
 export interface ChatResponseBody {

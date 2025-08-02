@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
-import { InstallPrompt } from "@/components/InstallPrompt";
+import { InstallPrompt } from '@/components/InstallPrompt'
+import { BottomNav } from '@/components/navigation/BottomNav'
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -44,7 +45,10 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <div className="pb-16">
+          {children}
+        </div>
+        <BottomNav />
         <Toaster />
         <InstallPrompt />
       </body>

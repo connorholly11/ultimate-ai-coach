@@ -1,6 +1,8 @@
 import { sbService } from '@/lib/supabase'
 import { Anthropic } from '@anthropic-ai/sdk'
 import { checkRateLimit, checkSpendingCap } from '@/lib/rate-limit'
+import { buildSystemPrompt } from '@/lib/prompt'
+import { MODEL_IDS, UI_CONSTANTS } from '@/lib/constants'
 
 export const runtime = 'edge'
 
@@ -16,6 +18,13 @@ interface ChatRequest {
   episodeId?: string
   reset?: boolean
   personality?: string
+  profile?: {
+    goals?: string
+    personality?: string
+    bigFive?: Record<string, number>
+    values?: string[]
+    attachmentStyle?: string
+  }
 }
 
 export async function POST(req: Request) {
@@ -136,19 +145,11 @@ export async function POST(req: Request) {
       { role: 'user' as const, content: message }
     ]
     
-    // Call Claude with personality-based system prompt
-    const systemPrompts = {
-      supportive: "You are a warm, encouraging AI coach who acts like a supportive friend. Use empathetic language, celebrate small wins, and provide gentle encouragement. Focus on emotional support and understanding.",
-      motivational: "You are a high-energy, motivational AI coach. Be enthusiastic, use powerful language, and push users to reach their potential. Focus on action, momentum, and breaking through barriers.",
-      strategic: "You are an analytical, strategic AI coach. Provide structured advice, help break down complex goals, and focus on optimization and planning. Use data-driven insights when relevant.",
-      accountability: "You are a direct, honest AI coach focused on accountability. Be clear and straightforward, call out excuses constructively, and keep users focused on their commitments. Balance firmness with support.",
-      default: "You are a helpful AI coach focused on personal development and goal achievement. Be supportive, insightful, and action-oriented."
-    }
-    
-    const systemPrompt = systemPrompts[personality as keyof typeof systemPrompts] || systemPrompts.default
+    // Build system prompt with profile data
+    const systemPrompt = buildSystemPrompt(body.profile, personality || body.profile?.personality)
     
     const claudeResponse = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: MODEL_IDS.SONNET,
       max_tokens: 1000,
       messages,
       system: systemPrompt
@@ -171,6 +172,31 @@ export async function POST(req: Request) {
       })
       .select()
       .single()
+    
+    // Check for breakthrough every N turns
+    if ((nextTurnIndex + 1) % UI_CONSTANTS.BREAKTHROUGH_CHECK_INTERVAL === 0) {
+      // Get recent messages for breakthrough analysis
+      const { data: recentMessages } = await sbService
+        .from('messages')
+        .select('role, content')
+        .eq('episode_id', episodeId)
+        .order('turn_index', { ascending: false })
+        .limit(10)
+      
+      if (recentMessages && recentMessages.length >= 5) {
+        // Fire and forget - don't wait for breakthrough detection
+        fetch(new URL('/api/breakthrough', req.url).toString(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            conversationId: episodeId,
+            messages: recentMessages.reverse(),
+            uid: user?.id,
+            anonUid: body.anonUid
+          })
+        }).catch(err => console.error('Breakthrough detection failed:', err))
+      }
+    }
     
     return Response.json({
       reply: assistantContent,

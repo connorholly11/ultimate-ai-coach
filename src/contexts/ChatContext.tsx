@@ -177,6 +177,25 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
+      // Get profile data from localStorage
+      const profileData = localStorage.getItem(STORAGE_KEYS.ONBOARDING)
+      let profile = undefined
+      
+      if (profileData) {
+        try {
+          const parsed = JSON.parse(profileData)
+          profile = {
+            goals: parsed.goals,
+            personality: parsed.personality,
+            bigFive: parsed.bigFive,
+            values: parsed.valuesRanking,
+            attachmentStyle: parsed.attachmentStyle
+          }
+        } catch (e) {
+          console.error('Failed to parse profile data:', e)
+        }
+      }
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -188,7 +207,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           anonUid,
           episodeId,
           reset: false,
-          personality
+          personality,
+          profile
         })
       })
 

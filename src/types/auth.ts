@@ -8,3 +8,15 @@ export interface OnboardingData {
   personality: 'supportive' | 'motivational' | 'strategic' | 'accountability'
   completedAt: string
 }
+
+export interface FTUEData extends OnboardingData {
+  valuesRanking?: string[]
+  bigFive?: {
+    openness: number
+    conscientiousness: number
+    extraversion: number
+    agreeableness: number
+    neuroticism: number
+  }
+  attachmentStyle?: string
+}

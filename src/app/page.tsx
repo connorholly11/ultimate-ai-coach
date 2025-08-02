@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { OnboardingFlow } from '@/components/onboarding/OnboardingFlow'
+import { FTUEFlow } from '@/components/onboarding/FTUEFlow'
 import { Logo } from '@/components/Logo'
 
 export default function Home() {
@@ -35,5 +35,5 @@ export default function Home() {
     )
   }
   
-  return showOnboarding ? <OnboardingFlow /> : null
+  return showOnboarding ? <FTUEFlow /> : null
 }
