@@ -5,7 +5,7 @@ interface RateLimitConfig {
   windowMs: number
 }
 
-const COST_PER_MESSAGE   = parseFloat(process.env.COST_PER_MESSAGE   || '0.003') // $/msg
+// const COST_PER_MESSAGE   = parseFloat(process.env.COST_PER_MESSAGE   || '0.003') // $/msg
 const DAILY_SPEND_LIMIT  = parseFloat(process.env.DAILY_SPEND_LIMIT  || '2')     // $/day
 const MONTHLY_SPEND_LIMIT = parseFloat(process.env.MONTHLY_SPEND_LIMIT || '50')  // $/month
 
@@ -60,8 +60,8 @@ export async function checkSpendingCap(): Promise<{ allowed: boolean; spent: num
   }
 
 // Supabase RPCs return a single numeric column named "total_cost".
-  const spentMonth = Array.isArray(monthData) ? monthData[0]?.total_cost ?? 0 : (monthData as any).total_cost ?? 0
-  const spentDay   = Array.isArray(dayData)   ? dayData[0]?.total_cost   ?? 0 : (dayData   as any).total_cost   ?? 0
+  const spentMonth = Array.isArray(monthData) ? monthData[0]?.total_cost ?? 0 : (monthData as Record<string, any>).total_cost ?? 0
+  const spentDay   = Array.isArray(dayData)   ? dayData[0]?.total_cost   ?? 0 : (dayData   as Record<string, any>).total_cost   ?? 0
 
   if (spentMonth >= 0.8 * MONTHLY_SPEND_LIMIT) {
     console.warn(

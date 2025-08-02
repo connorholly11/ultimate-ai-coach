@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog'
-import { ReactNode } from 'react'
+// import { ReactNode } from 'react'
 
 interface UpgradeModalProps {
   open: boolean

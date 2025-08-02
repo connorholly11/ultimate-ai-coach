@@ -137,7 +137,7 @@ export async function POST(req: Request) {
     }
     
     // Create the quest
-    const questData: any = {
+    const questData: Record<string, any> = {
       status: 'active',
       progress: {}
     }

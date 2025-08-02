@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     const realUid = user.id
     
     // Update user record with email, upgraded timestamp, and metadata
-    const metadata: any = {}
+    const metadata: Record<string, any> = {}
     if (onboardingData) {
       metadata.goals = onboardingData.goals
       metadata.personality = onboardingData.personality

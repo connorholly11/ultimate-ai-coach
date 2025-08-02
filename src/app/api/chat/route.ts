@@ -114,7 +114,7 @@ export async function POST(req: Request) {
     const nextTurnIndex = (maxTurn?.turn_index || 0) + 1
     
     // Store user message
-    const { data: userMsg } = await supabase
+    await supabase
       .from('messages')
       .insert({
         uid: callerUid,

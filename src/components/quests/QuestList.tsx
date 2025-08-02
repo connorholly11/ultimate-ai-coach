@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { QuestCard } from './QuestCard'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -26,7 +26,12 @@ interface UserQuest {
   id: string
   quest_template_id?: string
   quest_template?: QuestTemplate
-  custom_quest?: any
+  custom_quest?: {
+    title: string
+    description: string
+    category: string
+    tasks: any[]
+  }
   status: string
   progress: Record<string, boolean | number>
   started_at: string
@@ -41,14 +46,14 @@ export function QuestList() {
   
   useEffect(() => {
     fetchQuests()
-  }, [user])
+  }, [fetchQuests])
   
-  const fetchQuests = async () => {
+  const fetchQuests = useCallback(async () => {
     try {
       const supabase = sbBrowser()
       const anonUid = user ? undefined : ensureAnonUid()
       
-      const headers: any = {
+      const headers: HeadersInit = {
         'Content-Type': 'application/json'
       }
       
@@ -74,14 +79,14 @@ export function QuestList() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
   
   const startQuest = async (templateId: string) => {
     try {
       const supabase = sbBrowser()
       const anonUid = user ? undefined : ensureAnonUid()
       
-      const headers: any = {
+      const headers: HeadersInit = {
         'Content-Type': 'application/json'
       }
       
@@ -114,7 +119,7 @@ export function QuestList() {
       const supabase = sbBrowser()
       const anonUid = user ? undefined : ensureAnonUid()
       
-      const headers: any = {
+      const headers: HeadersInit = {
         'Content-Type': 'application/json'
       }
       
@@ -148,7 +153,7 @@ export function QuestList() {
       const supabase = sbBrowser()
       const anonUid = user ? undefined : ensureAnonUid()
       
-      const headers: any = {
+      const headers: HeadersInit = {
         'Content-Type': 'application/json'
       }
       
@@ -181,7 +186,7 @@ export function QuestList() {
       const supabase = sbBrowser()
       const anonUid = user ? undefined : ensureAnonUid()
       
-      const headers: any = {
+      const headers: HeadersInit = {
         'Content-Type': 'application/json'
       }
       

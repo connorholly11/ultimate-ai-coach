@@ -229,11 +229,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
     const count = messages.length
 
-    if (count >= 100 && !getFlag(HARD_KEY) && !showHardPrompt) {
+    if (count >= 100 && !getFlag(HARD_KEY)) {
       setShowHardPrompt(true)
-    } else if (count >= 20 && !getFlag(MID_KEY) && !showMidPrompt) {
+    } else if (count >= 20 && !getFlag(MID_KEY)) {
       setShowMidPrompt(true)
-    } else if (count >= 5 && !getFlag(SOFT_KEY) && !showSoftPrompt) {
+    } else if (count >= 5 && !getFlag(SOFT_KEY)) {
       setShowSoftPrompt(true)
     }
   }, [messages.length, user])

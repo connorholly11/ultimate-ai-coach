@@ -24,7 +24,7 @@ export function OnboardingFlow() {
   
   const handlePersonalityNext = async (personality: string) => {
     // Save to localStorage
-    const anonUid = ensureAnonUid()
+    ensureAnonUid() // Ensure anonymous UID is created
     const onboardingData = {
       goals: userData.goals,
       personality,
