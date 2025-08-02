@@ -6,10 +6,10 @@ export const runtime = 'edge'
 // PATCH /api/quests/[id] - Update quest progress or status
 export async function PATCH(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const questId = params.id
+    const { id: questId } = await params
     const body = await req.json()
     const { progress, status, anonUid } = body
     
@@ -90,10 +90,10 @@ export async function PATCH(
 // DELETE /api/quests/[id] - Abandon a quest
 export async function DELETE(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const questId = params.id
+    const { id: questId } = await params
     const url = new URL(req.url)
     const anonUid = url.searchParams.get('anonUid')
     
