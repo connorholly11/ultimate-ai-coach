@@ -32,7 +32,7 @@ export async function PATCH(
     }
     
     // Build update data
-    const updateData: Record<string, any> = {}
+    const updateData: Record<string, unknown> = {}
     if (progress !== undefined) updateData.progress = progress
     if (status !== undefined) updateData.status = status
     if (status === 'completed') updateData.completed_at = new Date().toISOString()
@@ -57,7 +57,7 @@ export async function PATCH(
     
     // If quest was completed, create achievement
     if (status === 'completed' && quest) {
-      const achievementData: Record<string, any> = {
+      const achievementData: Record<string, unknown> = {
         quest_id: questId,
         title: quest.quest_template?.title || quest.custom_quest?.title,
         category: quest.quest_template?.category || quest.custom_quest?.category || 'custom',

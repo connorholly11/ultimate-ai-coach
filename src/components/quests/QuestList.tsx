@@ -9,6 +9,13 @@ import { useSession } from '@/hooks/useSession'
 import { ensureAnonUid } from '@/lib/identity'
 import { sbBrowser } from '@/lib/supabase'
 
+interface QuestTask {
+  id: number
+  title: string
+  required: boolean
+  repeat?: number
+}
+
 interface QuestTemplate {
   id: string
   title: string
@@ -16,7 +23,7 @@ interface QuestTemplate {
   category: string
   difficulty: 'easy' | 'medium' | 'hard'
   duration_days: number
-  tasks: any[]
+  tasks: QuestTask[]
   rewards?: {
     points: number
   }
@@ -30,7 +37,7 @@ interface UserQuest {
     title: string
     description: string
     category: string
-    tasks: any[]
+    tasks: QuestTask[]
   }
   status: string
   progress: Record<string, boolean | number>
@@ -242,10 +249,19 @@ export function QuestList() {
           <div className="grid gap-4 md:grid-cols-2">
             {activeQuests.map(quest => {
               const questData = quest.quest_template || quest.custom_quest
+              if (!questData) return null
+              
+              // For custom quests, provide default values for missing fields
+              const fullQuestData = quest.quest_template || {
+                ...quest.custom_quest!,
+                difficulty: 'medium' as const,
+                duration_days: 30
+              }
+              
               return (
                 <QuestCard
                   key={quest.id}
-                  quest={{ ...questData, id: quest.id }}
+                  quest={{ ...fullQuestData, id: quest.id }}
                   isActive
                   progress={quest.progress}
                   onUpdate={(progress) => updateQuest(quest.id, progress)}

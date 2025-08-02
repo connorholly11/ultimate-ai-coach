@@ -60,8 +60,8 @@ export async function checkSpendingCap(): Promise<{ allowed: boolean; spent: num
   }
 
 // Supabase RPCs return a single numeric column named "total_cost".
-  const spentMonth = Array.isArray(monthData) ? monthData[0]?.total_cost ?? 0 : (monthData as Record<string, any>).total_cost ?? 0
-  const spentDay   = Array.isArray(dayData)   ? dayData[0]?.total_cost   ?? 0 : (dayData   as Record<string, any>).total_cost   ?? 0
+  const spentMonth = Array.isArray(monthData) ? monthData[0]?.total_cost ?? 0 : (monthData as Record<string, unknown>).total_cost ?? 0
+  const spentDay   = Array.isArray(dayData)   ? dayData[0]?.total_cost   ?? 0 : (dayData   as Record<string, unknown>).total_cost   ?? 0
 
   if (spentMonth >= 0.8 * MONTHLY_SPEND_LIMIT) {
     console.warn(
