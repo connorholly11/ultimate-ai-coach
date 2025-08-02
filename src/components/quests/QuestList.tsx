@@ -8,52 +8,26 @@ import { Info } from 'lucide-react'
 import { useSession } from '@/hooks/useSession'
 import { ensureAnonUid } from '@/lib/identity'
 import { sbBrowser } from '@/lib/supabase'
+import type { QuestTemplate, UserQuest } from '@/types'
 
-interface QuestTask {
-  id: number
-  title: string
-  required: boolean
-  repeat?: number
-}
-
-interface QuestTemplate {
-  id: string
-  title: string
-  description: string
-  category: string
-  difficulty: 'easy' | 'medium' | 'hard'
+// Types that account for API snake_case format
+interface ApiQuestTemplate extends Omit<QuestTemplate, 'durationDays'> {
   duration_days: number
-  tasks: QuestTask[]
-  rewards?: {
-    points: number
-  }
 }
 
-interface UserQuest {
-  id: string
+interface ApiUserQuest extends Omit<UserQuest, 'questTemplateId' | 'questTemplate' | 'customQuest' | 'startedAt'> {
   quest_template_id?: string
-  quest_template?: QuestTemplate
-  custom_quest?: {
-    title: string
-    description: string
-    category: string
-    tasks: QuestTask[]
-  }
-  status: string
-  progress: Record<string, boolean | number>
+  quest_template?: ApiQuestTemplate
+  custom_quest?: Omit<QuestTemplate, 'id' | 'difficulty' | 'durationDays'>
   started_at: string
 }
 
 export function QuestList() {
-  const [templates, setTemplates] = useState<QuestTemplate[]>([])
-  const [activeQuests, setActiveQuests] = useState<UserQuest[]>([])
+  const [templates, setTemplates] = useState<ApiQuestTemplate[]>([])
+  const [activeQuests, setActiveQuests] = useState<ApiUserQuest[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState('all')
   const { user } = useSession()
-  
-  useEffect(() => {
-    fetchQuests()
-  }, [fetchQuests])
   
   const fetchQuests = useCallback(async () => {
     try {
@@ -87,6 +61,10 @@ export function QuestList() {
       setLoading(false)
     }
   }, [user])
+  
+  useEffect(() => {
+    fetchQuests()
+  }, [fetchQuests])
   
   const startQuest = async (templateId: string) => {
     try {
@@ -261,7 +239,7 @@ export function QuestList() {
               return (
                 <QuestCard
                   key={quest.id}
-                  quest={{ ...fullQuestData, id: quest.id }}
+                  quest={{ ...fullQuestData, id: quest.id, durationDays: fullQuestData.duration_days }}
                   isActive
                   progress={quest.progress}
                   onUpdate={(progress) => updateQuest(quest.id, progress)}
@@ -300,7 +278,7 @@ export function QuestList() {
               {filteredTemplates.map(template => (
                 <QuestCard
                   key={template.id}
-                  quest={template}
+                  quest={{ ...template, durationDays: template.duration_days }}
                   onStart={() => startQuest(template.id)}
                   isActive={activeQuestTemplateIds.includes(template.id)}
                 />

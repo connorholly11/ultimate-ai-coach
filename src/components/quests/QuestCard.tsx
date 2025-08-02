@@ -5,31 +5,15 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Trophy, Clock, Target, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { ProgressMap, QuestTemplate } from '@/types'
 
-interface Quest {
-  id: string
-  title: string
-  description: string
-  category: string
-  difficulty: 'easy' | 'medium' | 'hard'
-  duration_days: number
-  tasks: Array<{
-    id: number
-    title: string
-    required: boolean
-    repeat?: number
-  }>
-  rewards?: {
-    points: number
-  }
-}
 
 interface QuestCardProps {
-  quest: Quest
+  quest: QuestTemplate
   isActive?: boolean
-  progress?: Record<string, boolean | number>
+  progress?: ProgressMap
   onStart?: () => void
-  onUpdate?: (progress: Record<string, boolean | number>) => void
+  onUpdate?: (progress: ProgressMap) => void
   onComplete?: () => void
   onAbandon?: () => void
 }
@@ -54,7 +38,7 @@ export function QuestCard({
     }
   }
   
-  const calculateProgress = () => {
+  const calculateProgress = (): number => {
     if (!isActive) return 0
     const totalTasks = quest.tasks.reduce((sum, task) => sum + (task.repeat || 1), 0)
     const completedTasks = Object.values(progress).reduce((sum: number, val) => {
@@ -79,7 +63,7 @@ export function QuestCard({
   const handleTaskToggle = (taskId: number, repeat?: number) => {
     if (!onUpdate) return
     
-    const currentValue = progress[taskId] || (repeat ? 0 : false)
+    const currentValue = progress[taskId] ?? (repeat ? 0 : false)
     let newValue: boolean | number
     
     if (repeat) {
@@ -88,7 +72,7 @@ export function QuestCard({
       newValue = !currentValue
     }
     
-    const newProgress = { ...progress, [taskId]: newValue }
+    const newProgress: ProgressMap = { ...progress, [taskId]: newValue }
     onUpdate(newProgress)
     
     // Check if quest is complete
@@ -129,7 +113,7 @@ export function QuestCard({
         <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground">
           <div className="flex items-center gap-1">
             <Clock className="h-3 w-3" />
-            <span>{quest.duration_days} days</span>
+            <span>{quest.durationDays} days</span>
           </div>
           <div className="flex items-center gap-1">
             <Target className="h-3 w-3" />
