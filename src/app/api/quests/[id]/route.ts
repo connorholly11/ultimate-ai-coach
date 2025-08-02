@@ -1,38 +1,26 @@
 import { sbService } from '@/lib/supabase'
-import { NextResponse } from 'next/server'
+import { NextResponse, NextRequest } from 'next/server'
 import { scoreAssessment } from '@/lib/scoring'
 import { assessmentTypeMap } from '@/lib/assessment-templates'
+import { getAuthUser, authError } from '@/lib/auth-helpers'
 import type { AssessmentResponse } from '@/types/assessments'
 
 export const runtime = 'edge'
 
 // PATCH /api/quests/[id] - Update quest progress or status
 export async function PATCH(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = await getAuthUser(req)
+    if (!user) return authError()
+    
     const { id: questId } = await params
     const body = await req.json()
-    const { progress, status, anonUid } = body
+    const { progress, status } = body
     
-    const authHeader = req.headers.get('Authorization')
     const supabase = sbService()
-    
-    // Get user ID from auth
-    let userId: string | null = null
-    if (authHeader) {
-      const token = authHeader.replace('Bearer ', '')
-      const { data: { user } } = await supabase.auth.getUser(token)
-      userId = user?.id || null
-    }
-    
-    if (!userId && !anonUid) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      )
-    }
     
     // Build update data
     const updateData: Record<string, unknown> = {}
@@ -41,18 +29,11 @@ export async function PATCH(
     if (status === 'completed') updateData.completed_at = new Date().toISOString()
     
     // Update the quest
-    const query = supabase
+    const { data: quest, error } = await supabase
       .from('user_quests')
       .update(updateData)
       .eq('id', questId)
-    
-    if (userId) {
-      query.eq('uid', userId)
-    } else {
-      query.eq('anon_uid', anonUid)
-    }
-    
-    const { data: quest, error } = await query
+      .eq('uid', user.id)
       .select('*, quest_template:quest_templates(*)')
       .single()
     
@@ -97,14 +78,12 @@ export async function PATCH(
         }
         
         // Upsert personality profile
-        const profileData = userId
-          ? { uid: userId, ...profileUpdate }
-          : { anon_uid: anonUid, ...profileUpdate }
+        const profileData = { uid: user.id, ...profileUpdate }
         
         await supabase
           .from('personality_profiles')
           .upsert(profileData, {
-            onConflict: userId ? 'uid' : 'anon_uid'
+            onConflict: 'uid'
           })
       }
       
@@ -116,13 +95,8 @@ export async function PATCH(
         time_taken_days: Math.ceil(
           (new Date().getTime() - new Date(quest.started_at).getTime()) / (1000 * 60 * 60 * 24)
         ),
-        points_earned: quest.quest_template?.rewards?.points || 100
-      }
-      
-      if (userId) {
-        achievementData.uid = userId
-      } else {
-        achievementData.anon_uid = anonUid
+        points_earned: quest.quest_template?.rewards?.points || 100,
+        uid: user.id
       }
       
       await supabase.from('quest_achievements').insert(achievementData)
@@ -141,45 +115,22 @@ export async function PATCH(
 
 // DELETE /api/quests/[id] - Abandon a quest
 export async function DELETE(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: questId } = await params
-    const url = new URL(req.url)
-    const anonUid = url.searchParams.get('anonUid')
+    const user = await getAuthUser(req)
+    if (!user) return authError()
     
-    const authHeader = req.headers.get('Authorization')
+    const { id: questId } = await params
     const supabase = sbService()
     
-    // Get user ID from auth
-    let userId: string | null = null
-    if (authHeader) {
-      const token = authHeader.replace('Bearer ', '')
-      const { data: { user } } = await supabase.auth.getUser(token)
-      userId = user?.id || null
-    }
-    
-    if (!userId && !anonUid) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      )
-    }
-    
     // Update quest status to abandoned
-    const query = supabase
+    const { error } = await supabase
       .from('user_quests')
       .update({ status: 'abandoned' })
       .eq('id', questId)
-    
-    if (userId) {
-      query.eq('uid', userId)
-    } else {
-      query.eq('anon_uid', anonUid)
-    }
-    
-    const { error } = await query
+      .eq('uid', user.id)
     
     if (error) throw error
     
