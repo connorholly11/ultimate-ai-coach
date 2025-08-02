@@ -93,7 +93,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 })
     }
     
-    return NextResponse.json({ profile })
+    // Transform database fields to match FTUEData structure
+    const transformedProfile = {
+      ...profile,
+      bigFive: profile.big_five,
+      valuesMeta: profile.values_meta,
+      attachment: profile.attachment_dimensions,
+      regulatoryFocus: profile.regulatory_focus,
+      selfEfficacy: profile.self_efficacy
+    }
+    
+    return NextResponse.json({ profile: transformedProfile })
   } catch (error) {
     console.error('Profile API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

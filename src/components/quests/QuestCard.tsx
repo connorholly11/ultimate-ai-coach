@@ -3,8 +3,9 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Trophy, Clock, Target, CheckCircle2 } from 'lucide-react'
+import { Trophy, Clock, Target, CheckCircle2, Brain } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { LikertScale, ValuesLikertScale } from './LikertScale'
 import type { ProgressMap, QuestTemplate } from '@/types'
 
 
@@ -40,6 +41,14 @@ export function QuestCard({
   
   const calculateProgress = (): number => {
     if (!isActive) return 0
+    
+    // For assessment quests, progress is based on how many questions are answered
+    if (quest.isAssessment) {
+      const answered = Object.keys(progress).length
+      const total = quest.tasks.length
+      return Math.round((answered / total) * 100)
+    }
+    
     const totalTasks = quest.tasks.reduce((sum, task) => sum + (task.repeat || 1), 0)
     const completedTasks = Object.values(progress).reduce((sum: number, val) => {
       if (typeof val === 'boolean') return sum + (val ? 1 : 0)
@@ -51,6 +60,12 @@ export function QuestCard({
   
   const isQuestComplete = () => {
     if (!isActive) return false
+    
+    // For assessment quests, complete when all questions are answered
+    if (quest.isAssessment) {
+      return quest.tasks.every(task => progress[task.id] !== undefined)
+    }
+    
     return quest.tasks.every(task => {
       const taskProgress = progress[task.id]
       if (task.repeat) {
@@ -76,15 +91,35 @@ export function QuestCard({
     onUpdate(newProgress)
     
     // Check if quest is complete
-    const allTasksComplete = quest.tasks.every(task => {
-      const taskProgress = newProgress[task.id]
-      if (task.repeat) {
-        return typeof taskProgress === 'number' && taskProgress >= task.repeat
+    if (quest.isAssessment) {
+      const allAnswered = quest.tasks.every(task => newProgress[task.id] !== undefined)
+      if (allAnswered && onComplete) {
+        onComplete()
       }
-      return taskProgress === true
-    })
+    } else {
+      const allTasksComplete = quest.tasks.every(task => {
+        const taskProgress = newProgress[task.id]
+        if (task.repeat) {
+          return typeof taskProgress === 'number' && taskProgress >= task.repeat
+        }
+        return taskProgress === true
+      })
+      
+      if (allTasksComplete && onComplete) {
+        onComplete()
+      }
+    }
+  }
+  
+  const handleAssessmentAnswer = (taskId: number, value: number) => {
+    if (!onUpdate) return
     
-    if (allTasksComplete && onComplete) {
+    const newProgress: ProgressMap = { ...progress, [taskId]: value }
+    onUpdate(newProgress)
+    
+    // Check if all questions are answered
+    const allAnswered = quest.tasks.every(task => newProgress[task.id] !== undefined)
+    if (allAnswered && onComplete) {
       onComplete()
     }
   }
@@ -103,10 +138,19 @@ export function QuestCard({
             <CardDescription className="mt-1">{quest.description}</CardDescription>
           </div>
           <div className="flex items-center gap-2 text-sm">
-            <Trophy className={cn("h-4 w-4", getDifficultyColor(quest.difficulty))} />
-            <span className={getDifficultyColor(quest.difficulty)}>
-              {quest.difficulty}
-            </span>
+            {quest.isAssessment ? (
+              <>
+                <Brain className="h-4 w-4 text-purple-500" />
+                <span className="text-purple-500">Assessment</span>
+              </>
+            ) : (
+              <>
+                <Trophy className={cn("h-4 w-4", getDifficultyColor(quest.difficulty))} />
+                <span className={getDifficultyColor(quest.difficulty)}>
+                  {quest.difficulty}
+                </span>
+              </>
+            )}
           </div>
         </div>
         
@@ -140,36 +184,69 @@ export function QuestCard({
       <CardContent>
         {(isActive || isExpanded) && (
           <div className="space-y-2 mb-4">
-            <h4 className="text-sm font-medium">Tasks:</h4>
-            {quest.tasks.map(task => (
-              <div
-                key={task.id}
-                className={cn(
-                  "flex items-center gap-2 p-2 rounded-lg",
-                  isActive && "hover:bg-muted cursor-pointer"
-                )}
-                onClick={() => isActive && handleTaskToggle(task.id, task.repeat)}
-              >
-                <CheckCircle2 className={cn(
-                  "h-4 w-4",
-                  progress[task.id] ? "text-primary" : "text-muted-foreground"
-                )} />
-                <span className={cn(
-                  "text-sm flex-1",
-                  progress[task.id] && "line-through text-muted-foreground"
-                )}>
-                  {task.title}
-                  {task.repeat && (
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      ({typeof progress[task.id] === 'number' ? progress[task.id] : 0}/{task.repeat})
+            {quest.isAssessment && isActive ? (
+              <>
+                <h4 className="text-sm font-medium mb-4">
+                  Please rate how much you agree with each statement:
+                </h4>
+                <div className="space-y-6">
+                  {quest.tasks.map(task => {
+                    const isValues = quest.id === 'values'
+                    const LikertComponent = isValues ? ValuesLikertScale : LikertScale
+                    
+                    return (
+                      <div key={task.id} className="pb-4 border-b last:border-0">
+                        <LikertComponent
+                          questionText={task.title}
+                          value={progress[task.id] as number | undefined}
+                          onChange={(value) => handleAssessmentAnswer(task.id, value)}
+                          disabled={!isActive}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+                
+                <div className="mt-6 p-4 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    Questions answered: {Object.keys(progress).length} of {quest.tasks.length}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <h4 className="text-sm font-medium">Tasks:</h4>
+                {quest.tasks.map(task => (
+                  <div
+                    key={task.id}
+                    className={cn(
+                      "flex items-center gap-2 p-2 rounded-lg",
+                      isActive && !quest.isAssessment && "hover:bg-muted cursor-pointer"
+                    )}
+                    onClick={() => isActive && !quest.isAssessment && handleTaskToggle(task.id, task.repeat)}
+                  >
+                    <CheckCircle2 className={cn(
+                      "h-4 w-4",
+                      progress[task.id] ? "text-primary" : "text-muted-foreground"
+                    )} />
+                    <span className={cn(
+                      "text-sm flex-1",
+                      progress[task.id] && "line-through text-muted-foreground"
+                    )}>
+                      {task.title}
+                      {task.repeat && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          ({typeof progress[task.id] === 'number' ? progress[task.id] : 0}/{task.repeat})
+                        </span>
+                      )}
                     </span>
-                  )}
-                </span>
-                {!task.required && (
-                  <span className="text-xs text-muted-foreground">Optional</span>
-                )}
-              </div>
-            ))}
+                    {!task.required && (
+                      <span className="text-xs text-muted-foreground">Optional</span>
+                    )}
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         )}
         
@@ -201,7 +278,7 @@ export function QuestCard({
                   onClick={onComplete}
                   className="flex-1"
                 >
-                  Complete Quest
+                  {quest.isAssessment ? 'Complete Assessment' : 'Complete Quest'}
                 </Button>
               ) : (
                 <Button
@@ -210,7 +287,7 @@ export function QuestCard({
                   onClick={onAbandon}
                   className="flex-1"
                 >
-                  Abandon Quest
+                  {quest.isAssessment ? 'Abandon Assessment' : 'Abandon Quest'}
                 </Button>
               )}
             </>

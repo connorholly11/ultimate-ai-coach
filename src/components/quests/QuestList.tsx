@@ -11,8 +11,10 @@ import { sbBrowser } from '@/lib/supabase'
 import type { QuestTemplate, UserQuest } from '@/types'
 
 // Types that account for API snake_case format
-interface ApiQuestTemplate extends Omit<QuestTemplate, 'durationDays'> {
+interface ApiQuestTemplate extends Omit<QuestTemplate, 'durationDays' | 'isAssessment' | 'orderIndex'> {
   duration_days: number
+  is_assessment?: boolean
+  order_index?: number
 }
 
 interface ApiUserQuest extends Omit<UserQuest, 'questTemplateId' | 'questTemplate' | 'customQuest' | 'startedAt'> {
@@ -211,10 +213,12 @@ export function QuestList() {
     )
   }
   
-  const categories = ['all', 'productivity', 'health', 'career', 'personal', 'habits']
+  const categories = ['all', 'assessments', 'productivity', 'health', 'career', 'personal', 'habits']
   const filteredTemplates = selectedCategory === 'all'
     ? templates
-    : templates.filter(t => t.category === selectedCategory)
+    : selectedCategory === 'assessments'
+    ? templates.filter(t => t.is_assessment)
+    : templates.filter(t => t.category === selectedCategory && !t.is_assessment)
   
   // Get active quest IDs
   const activeQuestTemplateIds = activeQuests.map(q => q.quest_template_id).filter(Boolean)
@@ -239,7 +243,13 @@ export function QuestList() {
               return (
                 <QuestCard
                   key={quest.id}
-                  quest={{ ...fullQuestData, id: quest.id, durationDays: fullQuestData.duration_days }}
+                  quest={{
+                    ...fullQuestData,
+                    id: quest.id,
+                    durationDays: fullQuestData.duration_days,
+                    isAssessment: (quest.quest_template as ApiQuestTemplate)?.is_assessment,
+                    orderIndex: (quest.quest_template as ApiQuestTemplate)?.order_index
+                  }}
                   isActive
                   progress={quest.progress}
                   onUpdate={(progress) => updateQuest(quest.id, progress)}
@@ -255,20 +265,44 @@ export function QuestList() {
       <div className="space-y-4">
         <h3 className="text-lg font-semibold">Available Quests</h3>
         
-        {activeQuests.length >= 3 && (
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertDescription>
-              You have reached the maximum number of active quests. Complete or abandon a quest to start a new one.
-            </AlertDescription>
-          </Alert>
-        )}
+        {(() => {
+          const activeAssessments = activeQuests.filter(q =>
+            q.quest_template?.is_assessment || false
+          ).length
+          const activeRegularQuests = activeQuests.filter(q =>
+            !q.quest_template?.is_assessment
+          ).length
+          
+          if (selectedCategory === 'assessments' && activeAssessments >= 1) {
+            return (
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  You can only have one active assessment at a time. Complete your current assessment to start a new one.
+                </AlertDescription>
+              </Alert>
+            )
+          }
+          
+          if (selectedCategory !== 'assessments' && activeRegularQuests >= 3) {
+            return (
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  You have reached the maximum number of active quests. Complete or abandon a quest to start a new one.
+                </AlertDescription>
+              </Alert>
+            )
+          }
+          
+          return null
+        })()}
         
         <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             {categories.map(cat => (
-              <TabsTrigger key={cat} value={cat} className="capitalize">
-                {cat}
+              <TabsTrigger key={cat} value={cat} className="capitalize text-xs sm:text-sm">
+                {cat === 'assessments' ? '🧠 Assess' : cat}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -278,7 +312,12 @@ export function QuestList() {
               {filteredTemplates.map(template => (
                 <QuestCard
                   key={template.id}
-                  quest={{ ...template, durationDays: template.duration_days }}
+                  quest={{
+                    ...template,
+                    durationDays: template.duration_days,
+                    isAssessment: template.is_assessment,
+                    orderIndex: template.order_index
+                  }}
                   onStart={() => startQuest(template.id)}
                   isActive={activeQuestTemplateIds.includes(template.id)}
                 />

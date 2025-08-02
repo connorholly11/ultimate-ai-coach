@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import { ensureAnonUid } from '@/lib/identity'
 import { useSession } from '@/hooks/useSession'
 import { sbBrowser } from '@/lib/supabase'
+import { STORAGE_KEYS } from '@/lib/constants'
 import {
   Dialog,
   DialogContent,

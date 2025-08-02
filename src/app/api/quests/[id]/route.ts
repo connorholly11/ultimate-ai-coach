@@ -1,5 +1,8 @@
 import { sbService } from '@/lib/supabase'
 import { NextResponse } from 'next/server'
+import { scoreAssessment } from '@/lib/scoring'
+import { assessmentTypeMap } from '@/lib/assessment-templates'
+import type { AssessmentResponse } from '@/types/assessments'
 
 export const runtime = 'edge'
 
@@ -55,8 +58,57 @@ export async function PATCH(
     
     if (error) throw error
     
-    // If quest was completed, create achievement
+    // If quest was completed, handle differently for assessments
     if (status === 'completed' && quest) {
+      const isAssessment = quest.quest_template?.is_assessment || false
+      const questTemplateId = quest.quest_template_id
+      
+      if (isAssessment && questTemplateId && assessmentTypeMap[questTemplateId]) {
+        // Score the assessment
+        const assessmentType = assessmentTypeMap[questTemplateId]
+        const responses = quest.progress as AssessmentResponse
+        const scores = scoreAssessment(assessmentType, responses)
+        
+        // Update personality profile
+        const profileUpdate: Record<string, unknown> = {
+          updated_at: new Date().toISOString()
+        }
+        
+        // Map scores to database columns
+        if (scores.bigFive) profileUpdate.big_five = scores.bigFive
+        if (scores.values) profileUpdate.values_dimensions = scores.values
+        if (scores.valuesMeta) profileUpdate.values_meta = scores.valuesMeta
+        if (scores.attachment) profileUpdate.attachment_dimensions = scores.attachment
+        if (scores.regulatoryFocus) profileUpdate.regulatory_focus = scores.regulatoryFocus
+        if (scores.selfEfficacy) profileUpdate.self_efficacy = scores.selfEfficacy
+        
+        // Also update the legacy fields for backward compatibility
+        if (scores.bigFive) profileUpdate.big_five = scores.bigFive
+        if (scores.valuesMeta) {
+          // Extract top 5 values based on scores
+          const valueScores = Object.entries(scores.values || {})
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 5)
+            .map(([name]) => name)
+          profileUpdate.values = valueScores
+        }
+        if (scores.attachment) {
+          profileUpdate.attachment_style = scores.attachment.style
+        }
+        
+        // Upsert personality profile
+        const profileData = userId
+          ? { uid: userId, ...profileUpdate }
+          : { anon_uid: anonUid, ...profileUpdate }
+        
+        await supabase
+          .from('personality_profiles')
+          .upsert(profileData, {
+            onConflict: userId ? 'uid' : 'anon_uid'
+          })
+      }
+      
+      // Create achievement record for all completed quests
       const achievementData: Record<string, unknown> = {
         quest_id: questId,
         title: quest.quest_template?.title || quest.custom_quest?.title,
