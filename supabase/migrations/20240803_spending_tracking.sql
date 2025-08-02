@@ -115,7 +115,7 @@ ALTER TABLE spending_logs ENABLE ROW LEVEL SECURITY;
 -- Admin can see all spending logs (replace with your admin email)
 CREATE POLICY "Admin can view all spending logs" ON spending_logs
   FOR ALL TO authenticated
-  USING (auth.email() = 'your-admin-email@example.com');
+  USING (auth.email() = 'connorholly11@gmail.com');
 
 -- Service role can insert spending logs
 CREATE POLICY "Service role can insert spending logs" ON spending_logs
