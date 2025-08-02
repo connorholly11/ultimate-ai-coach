@@ -1,7 +1,10 @@
 import { sbService } from '@/lib/supabase'
 import { Anthropic } from '@anthropic-ai/sdk'
+import { checkRateLimit, checkSpendingCap } from '@/lib/rate-limit'
 
 export const runtime = 'edge'
+
+const MAX_INPUT_CHARS = Number(process.env.MAX_INPUT_CHARS ?? 10_000)
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -16,8 +19,40 @@ interface ChatRequest {
 
 export async function POST(req: Request) {
   try {
+    // Check if service is enabled (kill switch)
+    if (process.env.ENABLE_CHAT === 'false') {
+      return new Response('Service under maintenance', { status: 503 })
+    }
+
+    // Get client IP for rate limiting
+    const clientIp = req.headers.get('x-forwarded-for') || 
+                     req.headers.get('x-real-ip') || 
+                     'unknown'
+    
+    // Check IP rate limit
+    const { allowed: ipAllowed } = await checkRateLimit(clientIp)
+    if (!ipAllowed) {
+      return new Response('Too many requests', { status: 429 })
+    }
+    
+    // Check global spending cap
+    const { allowed: budgetAllowed, spent } = await checkSpendingCap()
+    if (!budgetAllowed) {
+      console.error(
+        `Spending cap reached — spent this month: $${spent.toFixed(2)} (limit: $${process.env.MONTHLY_SPEND_LIMIT})`
+      )
+      return new Response('Service temporarily unavailable due to high usage', { status: 503 })
+    }
+    
     const body: ChatRequest = await req.json()
     const { message, anonUid, reset } = body
+
+    if (typeof message !== 'string' || message.length > MAX_INPUT_CHARS) {
+      return new Response(
+        `Message too long – max ${MAX_INPUT_CHARS.toLocaleString()} characters.`,
+        { status: 400 }
+      )
+    }
     
     // Get caller UID from auth header or anonymous UID
     const authHeader = req.headers.get('Authorization')
@@ -37,7 +72,7 @@ export async function POST(req: Request) {
     }
     
     // Handle episode management
-    const episodeId = reset ? crypto.randomUUID() : (body.episodeId || 'default')
+    const episodeId = reset ? crypto.randomUUID() : (body.episodeId || crypto.randomUUID())
     
     // Check daily rate limit
     const { data: dailyTurns } = await supabase
@@ -46,8 +81,14 @@ export async function POST(req: Request) {
       .eq('uid', callerUid)
       .single()
     
-    if (dailyTurns?.today >= 500) {
-      return new Response('Daily quota exceeded', { status: 429 })
+    const maxDailyTurns = supaJwt ? 500 : 100
+    if ((dailyTurns?.today || 0) >= maxDailyTurns) {
+      return new Response(
+        supaJwt
+          ? 'Daily quota exceeded'
+          : 'Daily quota exceeded. Sign up with email to get a higher limit!',
+        { status: 429 }
+      )
     }
     
     // Get recent messages for context (last 20 messages)
