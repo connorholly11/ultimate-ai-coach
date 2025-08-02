@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Anthropic } from '@anthropic-ai/sdk'
 import { sbService } from '@/lib/supabase'
 import { buildBreakthroughPrompt } from '@/lib/prompt'
-import { MODEL_IDS, MEMORY_TYPES } from '@/lib/constants'
+import { MODEL_IDS } from '@/lib/constants'
 
 export const runtime = 'edge'
 
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     }
     
     // Save the memory
-    const { error } = await sbService
+    const { error } = await sbService()
       .from('memories')
       .insert({
         uid: uid || null,

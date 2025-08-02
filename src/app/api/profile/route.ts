@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     
     if (authHeader) {
       const token = authHeader.replace('Bearer ', '')
-      const { data: { user }, error } = await sbService.auth.getUser(token)
+      const { data: { user }, error } = await sbService().auth.getUser(token)
       if (!error && user) {
         uid = user.id
       }
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     }
     
     // Upsert personality profile
-    const { error: profileError } = await sbService
+    const { error: profileError } = await sbService()
       .from('personality_profiles')
       .upsert(profileData, { onConflict: 'uid' })
     
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
     
     if (authHeader) {
       const token = authHeader.replace('Bearer ', '')
-      const { data: { user }, error } = await sbService.auth.getUser(token)
+      const { data: { user }, error } = await sbService().auth.getUser(token)
       if (!error && user) {
         uid = user.id
       }
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
     }
     
     // Fetch personality profile
-    const { data: profile, error } = await sbService
+    const { data: profile, error } = await sbService()
       .from('personality_profiles')
       .select('*')
       .or(`uid.eq.${uid},anon_uid.eq.${uid}`)

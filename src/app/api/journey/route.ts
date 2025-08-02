@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     
     if (authHeader) {
       const token = authHeader.replace('Bearer ', '')
-      const { data: { user }, error } = await sbService.auth.getUser(token)
+      const { data: { user }, error } = await sbService().auth.getUser(token)
       if (!error && user) {
         uid = user.id
       }
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     }
     
     // Fetch memories
-    const { data: memories, error: memoriesError } = await sbService
+    const { data: memories, error: memoriesError } = await sbService()
       .from('memories')
       .select('*')
       .or(`uid.eq.${uid},anon_uid.eq.${uid}`)
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
     }
     
     // Fetch conversations
-    const { data: conversations, error: conversationsError } = await sbService
+    const { data: conversations, error: conversationsError } = await sbService()
       .from('conversations')
       .select('*')
       .or(`uid.eq.${uid},anon_uid.eq.${uid}`)
@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
     // Count messages for each conversation
     const conversationsWithCount = await Promise.all(
       (conversations || []).map(async (conv) => {
-        const { count } = await sbService
+        const { count } = await sbService()
           .from('messages')
           .select('*', { count: 'exact', head: true })
           .or(`uid.eq.${uid},anon_uid.eq.${uid}`)

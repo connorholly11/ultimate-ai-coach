@@ -47,6 +47,7 @@ export default function JourneyPage() {
   
   useEffect(() => {
     fetchJourneyData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
   
   const fetchJourneyData = async () => {
