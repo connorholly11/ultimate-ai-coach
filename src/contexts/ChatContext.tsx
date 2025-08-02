@@ -18,6 +18,7 @@ interface Message {
   id: number
   role: 'user' | 'assistant'
   content: string
+  timestamp?: number
 }
 
 interface ChatContextShape {
@@ -118,6 +119,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(false)
   const [episodeId, setEpisodeId] = useState<string | null>(null)
+  
+  // Helper to create messages with timestamp
+  const makeMessage = (role: 'user' | 'assistant', content: string): Message => ({
+    id: Date.now() + Math.random(), // Add random to avoid exact duplicate timestamps
+    role,
+    content,
+    timestamp: Date.now(),
+  })
 
   /* upgrade-prompt state */
   const [showSoftPrompt, setShowSoftPrompt] = useState(false)
@@ -226,8 +235,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       // Add messages to state
       setMessages(prev => [
         ...prev,
-        { id: Date.now(), role: 'user', content: text },
-        { id: Date.now() + 1, role: 'assistant', content: data.reply }
+        makeMessage('user', text),
+        makeMessage('assistant', data.reply)
       ])
     } catch (error) {
       console.error('Send error:', error)

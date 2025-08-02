@@ -2,6 +2,8 @@ export interface ChatMessage {
   id?: string            // local messages use Date.now() fall-back
   role: 'user' | 'assistant'
   content: string
+  /** epoch-ms when the message was generated */
+  timestamp?: number
 }
 
 export interface ChatRequestBody {
