@@ -27,6 +27,9 @@ export default function AuthCallback() {
         if (anonUid) {
           // Call the upgrade endpoint to merge accounts
           try {
+            // Get onboarding data before the API call
+            const onboardingData = localStorage.getItem('purpose_onboarding')
+            
             const response = await fetch('/api/upgrade', {
               method: 'POST',
               headers: {
@@ -43,9 +46,6 @@ export default function AuthCallback() {
             if (response.ok) {
               // Clear anonymous UID
               localStorage.removeItem('purpose_uid')
-              
-              // Sync onboarding data if exists
-              const onboardingData = localStorage.getItem('purpose_onboarding')
               if (onboardingData) {
                 // TODO: Save to user profile in database
                 console.log('TODO: Sync onboarding data to user profile')
