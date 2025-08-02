@@ -1,38 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sbService } from '@/lib/supabase'
 import type { FTUEData } from '@/types/auth'
+import { getAuthUser, authError } from '@/lib/auth-helpers'
 
 export const runtime = 'edge'
 
 export async function POST(req: NextRequest) {
   try {
+    // Require authentication
+    const user = await getAuthUser(req)
+    if (!user) return authError()
+    
     const body = await req.json()
-    const { profile, anonUid } = body as { profile: FTUEData; anonUid?: string }
+    const { profile } = body as { profile: FTUEData }
     
-    if (!profile || (!anonUid && !req.headers.get('Authorization'))) {
-      return NextResponse.json({ error: 'Missing profile data or user identifier' }, { status: 400 })
-    }
-    
-    // Determine user ID
-    let uid = anonUid
-    const authHeader = req.headers.get('Authorization')
-    
-    if (authHeader) {
-      const token = authHeader.replace('Bearer ', '')
-      const { data: { user }, error } = await sbService().auth.getUser(token)
-      if (!error && user) {
-        uid = user.id
-      }
-    }
-    
-    if (!uid) {
-      return NextResponse.json({ error: 'Invalid user identifier' }, { status: 401 })
+    if (!profile) {
+      return NextResponse.json({ error: 'Missing profile data' }, { status: 400 })
     }
     
     // Prepare personality profile data
     const profileData = {
-      uid,
-      anon_uid: anonUid,
+      uid: user.id,
       big_five: profile.bigFive || null,
       values: profile.valuesRanking || [],
       attachment_style: profile.attachmentStyle || null,
@@ -58,30 +46,15 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url)
-    const anonUid = searchParams.get('anonUid')
-    
-    // Determine user ID
-    let uid = anonUid
-    const authHeader = req.headers.get('Authorization')
-    
-    if (authHeader) {
-      const token = authHeader.replace('Bearer ', '')
-      const { data: { user }, error } = await sbService().auth.getUser(token)
-      if (!error && user) {
-        uid = user.id
-      }
-    }
-    
-    if (!uid) {
-      return NextResponse.json({ error: 'Invalid user identifier' }, { status: 401 })
-    }
+    // Require authentication
+    const user = await getAuthUser(req)
+    if (!user) return authError()
     
     // Fetch personality profile
     const { data: profile, error } = await sbService()
       .from('personality_profiles')
       .select('*')
-      .or(`uid.eq.${uid},anon_uid.eq.${uid}`)
+      .eq('uid', user.id)
       .single()
     
     if (error) {

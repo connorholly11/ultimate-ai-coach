@@ -3,7 +3,9 @@ import { Anthropic } from '@anthropic-ai/sdk'
 import { checkRateLimit, checkSpendingCap } from '@/lib/rate-limit'
 import { buildSystemPrompt } from '@/lib/prompt'
 import { MODEL_IDS, UI_CONSTANTS } from '@/lib/constants'
-import type { FTUEData, SupaUser } from '@/types/auth'
+import type { FTUEData } from '@/types/auth'
+import { getAuthUser, authError } from '@/lib/auth-helpers'
+import type { NextRequest } from 'next/server'
 
 export const runtime = 'edge'
 
@@ -15,7 +17,6 @@ const anthropic = new Anthropic({
 
 interface ChatRequest {
   message: string
-  anonUid?: string
   episodeId?: string
   reset?: boolean
   personality?: string
@@ -23,7 +24,7 @@ interface ChatRequest {
   profile?: Partial<FTUEData>
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     // Check if service is enabled (kill switch)
     if (process.env.ENABLE_CHAT === 'false') {
@@ -50,8 +51,12 @@ export async function POST(req: Request) {
       return new Response('Service temporarily unavailable due to high usage', { status: 503 })
     }
     
+    // Require authentication
+    const user = await getAuthUser(req)
+    if (!user) return authError()
+    
     const body: ChatRequest = await req.json()
-    const { message, anonUid, reset, personality } = body
+    const { message, reset, personality } = body
 
     if (typeof message !== 'string' || message.length > MAX_INPUT_CHARS) {
       return new Response(
@@ -60,24 +65,8 @@ export async function POST(req: Request) {
       )
     }
     
-    // Get caller UID from auth header or anonymous UID
-    const authHeader = req.headers.get('Authorization')
-    const supaJwt = authHeader?.replace('Bearer ', '')
     const supabase = sbService()
-    
-    let callerUid: string
-    let authUser: SupaUser | null = null
-    if (supaJwt) {
-      const { data: { user } } = await supabase.auth.getUser(supaJwt)
-      authUser = user ?? null
-      callerUid = authUser?.id || anonUid || ''
-    } else {
-      callerUid = anonUid || ''
-    }
-    
-    if (!callerUid) {
-      return new Response('No user identifier', { status: 401 })
-    }
+    const callerUid = user.id
     
     // Handle episode management
     const episodeId = reset ? crypto.randomUUID() : (body.episodeId || crypto.randomUUID())
@@ -89,14 +78,9 @@ export async function POST(req: Request) {
       .eq('uid', callerUid)
       .single()
     
-    const maxDailyTurns = supaJwt ? 500 : 100
+    const maxDailyTurns = 500
     if ((dailyTurns?.today || 0) >= maxDailyTurns) {
-      return new Response(
-        supaJwt
-          ? 'Daily quota exceeded'
-          : 'Daily quota exceeded. Sign up with email to get a higher limit!',
-        { status: 429 }
-      )
+      return new Response('Daily quota exceeded', { status: 429 })
     }
     
     // Get recent messages for context (last 20 messages)
@@ -194,8 +178,7 @@ export async function POST(req: Request) {
           body: JSON.stringify({
             conversationId: episodeId,
             messages: recentMessages.reverse(),
-            uid: authUser?.id,
-            anonUid: body.anonUid
+            uid: user.id
           })
         }).catch(err => console.error('Breakthrough detection failed:', err))
       }

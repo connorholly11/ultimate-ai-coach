@@ -3,6 +3,7 @@ import { Anthropic } from '@anthropic-ai/sdk'
 import { sbService } from '@/lib/supabase'
 import { buildBreakthroughPrompt } from '@/lib/prompt'
 import { MODEL_IDS } from '@/lib/constants'
+import { getAuthUser, authError } from '@/lib/auth-helpers'
 
 export const runtime = 'edge'
 
@@ -13,8 +14,7 @@ const anthropic = new Anthropic({
 interface BreakthroughRequest {
   conversationId: string
   messages: Array<{ role: string; content: string }>
-  uid?: string
-  anonUid?: string
+  uid: string
 }
 
 interface BreakthroughAnalysis {
@@ -26,8 +26,12 @@ interface BreakthroughAnalysis {
 
 export async function POST(req: NextRequest) {
   try {
+    // Require authentication
+    const user = await getAuthUser(req)
+    if (!user) return authError()
+    
     const body = await req.json() as BreakthroughRequest
-    const { conversationId, messages, uid, anonUid } = body
+    const { conversationId, messages, uid } = body
     
     if (!messages || messages.length < 5) {
       return NextResponse.json({ success: false, reason: 'Not enough messages' })
@@ -64,8 +68,7 @@ export async function POST(req: NextRequest) {
     const { error } = await sbService()
       .from('memories')
       .insert({
-        uid: uid || null,
-        anon_uid: anonUid || null,
+        uid: user.id,
         title: analysis.title,
         insight: analysis.insight,
         type: analysis.type,

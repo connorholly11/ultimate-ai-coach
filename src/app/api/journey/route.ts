@@ -1,36 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sbService } from '@/lib/supabase'
+import { getAuthUser, authError } from '@/lib/auth-helpers'
 
 export const runtime = 'edge'
 
 export async function GET(req: NextRequest) {
   try {
+    // Require authentication
+    const user = await getAuthUser(req)
+    if (!user) return authError()
+    
     const { searchParams } = new URL(req.url)
-    const anonUid = searchParams.get('anonUid')
     const limit = parseInt(searchParams.get('limit') || '20')
     const offset = parseInt(searchParams.get('offset') || '0')
     
-    // Determine user ID
-    let uid = anonUid
-    const authHeader = req.headers.get('Authorization')
-    
-    if (authHeader) {
-      const token = authHeader.replace('Bearer ', '')
-      const { data: { user }, error } = await sbService().auth.getUser(token)
-      if (!error && user) {
-        uid = user.id
-      }
-    }
-    
-    if (!uid) {
-      return NextResponse.json({ error: 'Invalid user identifier' }, { status: 401 })
-    }
+    const uid = user.id
     
     // Fetch memories
     const { data: memories, error: memoriesError } = await sbService()
       .from('memories')
       .select('*')
-      .or(`uid.eq.${uid},anon_uid.eq.${uid}`)
+      .eq('uid', uid)
       .order('created_at', { ascending: false })
       .limit(limit)
       .range(offset, offset + limit - 1)
@@ -43,7 +33,7 @@ export async function GET(req: NextRequest) {
     const { data: conversations, error: conversationsError } = await sbService()
       .from('conversations')
       .select('*')
-      .or(`uid.eq.${uid},anon_uid.eq.${uid}`)
+      .eq('uid', uid)
       .order('started_at', { ascending: false })
       .limit(limit)
       .range(offset, offset + limit - 1)
@@ -58,7 +48,7 @@ export async function GET(req: NextRequest) {
         const { count } = await sbService()
           .from('messages')
           .select('*', { count: 'exact', head: true })
-          .or(`uid.eq.${uid},anon_uid.eq.${uid}`)
+          .eq('uid', uid)
           .gte('created_at', conv.started_at)
           .lte('created_at', conv.ended_at || new Date().toISOString())
         

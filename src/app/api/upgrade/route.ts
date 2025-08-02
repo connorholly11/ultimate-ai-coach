@@ -1,27 +1,18 @@
 import { sbService } from '@/lib/supabase'
+import { getAuthUser, authError } from '@/lib/auth-helpers'
+import type { NextRequest } from 'next/server'
 
 export const runtime = 'edge'
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const { email, anonUid, onboardingData } = await req.json()
+    // Require authentication
+    const user = await getAuthUser(req)
+    if (!user) return authError()
+    
+    const { email, onboardingData } = await req.json()
     
     const supabase = sbService()
-    
-    // Get the authenticated user from the Authorization header
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      return new Response('Unauthorized', { status: 401 })
-    }
-    
-    const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error } = await supabase.auth.getUser(token)
-    
-    if (error || !user) {
-      return new Response('Invalid session', { status: 401 })
-    }
-    
-    const realUid = user.id
     
     // Update user record with email, upgraded timestamp, and metadata
     const metadata: Record<string, unknown> = {}
@@ -32,19 +23,11 @@ export async function POST(req: Request) {
     }
     
     await supabase.from('users').upsert({
-      uid: realUid,
+      uid: user.id,
       email: user.email || email,
       upgraded_at: new Date().toISOString(),
       metadata: Object.keys(metadata).length > 0 ? metadata : null
     })
-    
-    // Migrate messages from anonymous to authenticated user
-    if (anonUid && anonUid !== realUid) {
-      await supabase
-        .from('messages')
-        .update({ uid: realUid })
-        .eq('uid', anonUid)
-    }
     
     return new Response(null, { status: 204 })
   } catch (error) {
