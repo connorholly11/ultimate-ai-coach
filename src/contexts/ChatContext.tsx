@@ -164,6 +164,18 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       const anonUid = user ? undefined : ensureAnonUid()
       const supabase = sbBrowser()
       const token = user ? (await supabase.auth.getSession()).data.session?.access_token : undefined
+      
+      // Get personality from onboarding data
+      const onboardingData = localStorage.getItem('purpose_onboarding')
+      let personality = 'default'
+      if (onboardingData) {
+        try {
+          const parsed = JSON.parse(onboardingData)
+          personality = parsed.personality || 'default'
+        } catch (e) {
+          console.error('Failed to parse onboarding data:', e)
+        }
+      }
 
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -175,7 +187,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           message: text,
           anonUid,
           episodeId,
-          reset: false
+          reset: false,
+          personality
         })
       })
 

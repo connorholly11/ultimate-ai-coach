@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
+import { InstallPrompt } from "@/components/InstallPrompt";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,6 +17,21 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Ultimate AI Coach",
   description: "Your personal AI coach for growth and achievement",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "AI Coach",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  themeColor: "#0f172a",
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 1,
+  },
 };
 
 export default function RootLayout({
@@ -30,6 +46,7 @@ export default function RootLayout({
       >
         {children}
         <Toaster />
+        <InstallPrompt />
       </body>
     </html>
   );

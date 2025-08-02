@@ -6,7 +6,8 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Send, RotateCcw } from 'lucide-react'
+import { Send, RotateCcw, Trophy } from 'lucide-react'
+import Link from 'next/link'
 
 export function Chat() {
   const { messages, send, loading, resetChat } = useChat()
@@ -39,15 +40,27 @@ export function Chat() {
     <div className="flex flex-col h-full max-w-4xl mx-auto">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-semibold">AI Coach</h1>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={resetChat}
-          className="gap-2"
-        >
-          <RotateCcw className="h-4 w-4" />
-          New Chat
-        </Button>
+        <div className="flex gap-2">
+          <Link href="/quests">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+            >
+              <Trophy className="h-4 w-4" />
+              Quests
+            </Button>
+          </Link>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={resetChat}
+            className="gap-2"
+          >
+            <RotateCcw className="h-4 w-4" />
+            New Chat
+          </Button>
+        </div>
       </div>
 
       <Card className="flex-1 flex flex-col overflow-hidden">

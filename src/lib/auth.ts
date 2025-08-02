@@ -4,11 +4,15 @@ import { clearAnonUid } from './identity'
 export async function upgradeToEmail(email: string, anonUid: string) {
   const supabase = sbBrowser()
   
+  // Get the callback URL
+  const callbackUrl = `${window.location.origin}/auth/callback`
+  
   // Sign in with magic link
   const { error: signInError } = await supabase.auth.signInWithOtp({
     email,
     options: {
       shouldCreateUser: true,
+      emailRedirectTo: callbackUrl
     }
   })
   
@@ -16,8 +20,9 @@ export async function upgradeToEmail(email: string, anonUid: string) {
     throw signInError
   }
   
-  // After user clicks the magic link and returns, we need to handle the upgrade
-  // This will be called from the callback page
+  // Store the anonymous UID for the callback to use
+  localStorage.setItem('pending_upgrade_uid', anonUid)
+  
   return { success: true, message: 'Check your email for the magic link!' }
 }
 

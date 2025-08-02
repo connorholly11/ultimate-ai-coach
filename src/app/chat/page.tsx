@@ -3,6 +3,7 @@
 import { Chat } from '@/components/Chat'
 import { SaveProgressButton } from '@/components/SaveProgressButton'
 import { ChatProvider } from '@/contexts/ChatContext'
+import { SyncStatus } from '@/components/SyncStatus'
 
 export default function ChatPage() {
   return (
@@ -11,7 +12,10 @@ export default function ChatPage() {
         <header className="border-b">
           <div className="container mx-auto px-4 py-4 flex justify-between items-center">
             <h1 className="text-xl font-semibold">Ultimate AI Coach</h1>
-            <SaveProgressButton />
+            <div className="flex items-center gap-4">
+              <SyncStatus />
+              <SaveProgressButton />
+            </div>
           </div>
         </header>
         

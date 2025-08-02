@@ -4,7 +4,7 @@ export const runtime = 'edge'
 
 export async function POST(req: Request) {
   try {
-    const { email, anonUid } = await req.json()
+    const { email, anonUid, onboardingData } = await req.json()
     
     const supabase = sbService()
     
@@ -23,11 +23,19 @@ export async function POST(req: Request) {
     
     const realUid = user.id
     
-    // Update user record with email and upgraded timestamp
+    // Update user record with email, upgraded timestamp, and metadata
+    const metadata: any = {}
+    if (onboardingData) {
+      metadata.goals = onboardingData.goals
+      metadata.personality = onboardingData.personality
+      metadata.onboarding_completed_at = onboardingData.completedAt
+    }
+    
     await supabase.from('users').upsert({
       uid: realUid,
       email: user.email || email,
-      upgraded_at: new Date().toISOString()
+      upgraded_at: new Date().toISOString(),
+      metadata: Object.keys(metadata).length > 0 ? metadata : null
     })
     
     // Migrate messages from anonymous to authenticated user

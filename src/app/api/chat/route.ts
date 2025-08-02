@@ -15,6 +15,7 @@ interface ChatRequest {
   anonUid?: string
   episodeId?: string
   reset?: boolean
+  personality?: string
 }
 
 export async function POST(req: Request) {
@@ -45,7 +46,7 @@ export async function POST(req: Request) {
     }
     
     const body: ChatRequest = await req.json()
-    const { message, anonUid, reset } = body
+    const { message, anonUid, reset, personality } = body
 
     if (typeof message !== 'string' || message.length > MAX_INPUT_CHARS) {
       return new Response(
@@ -135,12 +136,22 @@ export async function POST(req: Request) {
       { role: 'user' as const, content: message }
     ]
     
-    // Call Claude
+    // Call Claude with personality-based system prompt
+    const systemPrompts = {
+      supportive: "You are a warm, encouraging AI coach who acts like a supportive friend. Use empathetic language, celebrate small wins, and provide gentle encouragement. Focus on emotional support and understanding.",
+      motivational: "You are a high-energy, motivational AI coach. Be enthusiastic, use powerful language, and push users to reach their potential. Focus on action, momentum, and breaking through barriers.",
+      strategic: "You are an analytical, strategic AI coach. Provide structured advice, help break down complex goals, and focus on optimization and planning. Use data-driven insights when relevant.",
+      accountability: "You are a direct, honest AI coach focused on accountability. Be clear and straightforward, call out excuses constructively, and keep users focused on their commitments. Balance firmness with support.",
+      default: "You are a helpful AI coach focused on personal development and goal achievement. Be supportive, insightful, and action-oriented."
+    }
+    
+    const systemPrompt = systemPrompts[personality as keyof typeof systemPrompts] || systemPrompts.default
+    
     const claudeResponse = await anthropic.messages.create({
       model: 'claude-3-5-sonnet-20241022',
       max_tokens: 1000,
       messages,
-      system: "You are a helpful AI coach focused on personal development and goal achievement. Be supportive, insightful, and action-oriented."
+      system: systemPrompt
     })
     
     const assistantContent = claudeResponse.content[0].type === 'text' 
