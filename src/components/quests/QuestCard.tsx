@@ -57,7 +57,7 @@ export function QuestCard({
   const calculateProgress = () => {
     if (!isActive) return 0
     const totalTasks = quest.tasks.reduce((sum, task) => sum + (task.repeat || 1), 0)
-    const completedTasks = Object.values(progress).reduce((sum, val) => {
+    const completedTasks = Object.values(progress).reduce((sum: number, val) => {
       if (typeof val === 'boolean') return sum + (val ? 1 : 0)
       if (typeof val === 'number') return sum + val
       return sum
