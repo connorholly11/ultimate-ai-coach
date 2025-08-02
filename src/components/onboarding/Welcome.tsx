@@ -1,7 +1,8 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
-import { ArrowRight, Brain, Target, Users } from 'lucide-react'
+import { ArrowRight, Target, Users } from 'lucide-react'
+import { Logo } from '@/components/Logo'
 
 interface WelcomeProps {
   onNext: () => void
@@ -12,8 +13,8 @@ export function Welcome({ onNext }: WelcomeProps) {
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="max-w-2xl w-full">
         <div className="text-center mb-12">
-          <div className="inline-flex p-4 bg-primary/10 rounded-2xl mb-6">
-            <Brain className="h-16 w-16 text-primary" />
+          <div className="mb-6">
+            <Logo size="lg" className="mx-auto" />
           </div>
           
           <h1 className="text-4xl font-bold mb-4">

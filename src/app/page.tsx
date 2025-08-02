@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { OnboardingFlow } from '@/components/onboarding/OnboardingFlow'
+import { Logo } from '@/components/Logo'
 
 export default function Home() {
   const [showOnboarding, setShowOnboarding] = useState(false)
@@ -27,7 +28,7 @@ export default function Home() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <Logo size="lg" className="mx-auto mb-4 animate-pulse" />
           <p className="text-muted-foreground">Loading...</p>
         </div>
       </div>

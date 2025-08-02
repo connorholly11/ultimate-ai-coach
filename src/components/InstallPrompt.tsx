@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { X, Download } from 'lucide-react'
+import { X } from 'lucide-react'
+import { Logo } from '@/components/Logo'
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[]
@@ -84,9 +85,7 @@ export function InstallPrompt() {
       </button>
       
       <div className="flex items-start gap-3">
-        <div className="p-2 bg-primary/10 rounded-md">
-          <Download className="h-5 w-5 text-primary" />
-        </div>
+        <Logo size="sm" />
         
         <div className="flex-1">
           <h3 className="font-semibold text-sm">Install AI Coach</h3>
