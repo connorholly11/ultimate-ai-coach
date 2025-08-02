@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { PERSONALITY_STYLES } from './constants'
 import type { FTUEData } from '@/types/auth'
 

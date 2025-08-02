@@ -3,6 +3,7 @@ import { Anthropic } from '@anthropic-ai/sdk'
 import { checkRateLimit, checkSpendingCap } from '@/lib/rate-limit'
 import { buildSystemPrompt } from '@/lib/prompt'
 import { MODEL_IDS, UI_CONSTANTS } from '@/lib/constants'
+import type { FTUEData, SupaUser } from '@/types/auth'
 
 export const runtime = 'edge'
 
@@ -18,13 +19,8 @@ interface ChatRequest {
   episodeId?: string
   reset?: boolean
   personality?: string
-  profile?: {
-    goals?: string
-    personality?: string
-    bigFive?: Record<string, number>
-    values?: string[]
-    attachmentStyle?: string
-  }
+  /** user-supplied profile; partial is fine */
+  profile?: Partial<FTUEData>
 }
 
 export async function POST(req: Request) {
@@ -70,9 +66,11 @@ export async function POST(req: Request) {
     const supabase = sbService()
     
     let callerUid: string
+    let authUser: SupaUser | null = null
     if (supaJwt) {
       const { data: { user } } = await supabase.auth.getUser(supaJwt)
-      callerUid = user?.id || anonUid || ''
+      authUser = user ?? null
+      callerUid = authUser?.id || anonUid || ''
     } else {
       callerUid = anonUid || ''
     }
@@ -146,7 +144,11 @@ export async function POST(req: Request) {
     ]
     
     // Build system prompt with profile data
-    const systemPrompt = buildSystemPrompt(body.profile, personality || body.profile?.personality)
+    // cast avoids the "Record<string,number> not assignable" error
+    const systemPrompt = buildSystemPrompt(
+      body.profile as Partial<FTUEData> | undefined,
+      personality || body.profile?.personality
+    )
     
     const claudeResponse = await anthropic.messages.create({
       model: MODEL_IDS.SONNET,
@@ -176,7 +178,8 @@ export async function POST(req: Request) {
     // Check for breakthrough every N turns
     if ((nextTurnIndex + 1) % UI_CONSTANTS.BREAKTHROUGH_CHECK_INTERVAL === 0) {
       // Get recent messages for breakthrough analysis
-      const { data: recentMessages } = await sbService
+      // use the already-initialised client instead of the factory fn
+      const { data: recentMessages } = await supabase
         .from('messages')
         .select('role, content')
         .eq('episode_id', episodeId)
@@ -191,7 +194,7 @@ export async function POST(req: Request) {
           body: JSON.stringify({
             conversationId: episodeId,
             messages: recentMessages.reverse(),
-            uid: user?.id,
+            uid: authUser?.id,
             anonUid: body.anonUid
           })
         }).catch(err => console.error('Breakthrough detection failed:', err))
