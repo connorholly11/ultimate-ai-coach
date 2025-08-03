@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react'
 import { MemoryCard } from '@/components/journey/MemoryCard'
 import { TimelineItem } from '@/components/journey/TimelineItem'
 import { Sparkles, MessageCircle, Star } from 'lucide-react'
+// (AuthGuard import removed)
 import { sbBrowser } from '@/lib/supabase'
-import { ensureAnonUid } from '@/lib/identity'
 import { useSession } from '@/hooks/useSession'
 import { API_ENDPOINTS } from '@/lib/constants'
 
@@ -38,7 +38,7 @@ interface PersonalityProfile {
   attachmentStyle?: string
 }
 
-export default function JourneyPage() {
+function JourneyPageContent() {
   const [memories, setMemories] = useState<Memory[]>([])
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [profile, setProfile] = useState<PersonalityProfile | null>(null)
@@ -51,39 +51,31 @@ export default function JourneyPage() {
   }, [user])
   
   const fetchJourneyData = async () => {
+    if (!user) {
+      throw new Error('Authentication required to fetch journey data')
+    }
+    
     try {
       const supabase = sbBrowser()
-      const anonUid = user ? undefined : ensureAnonUid()
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        throw new Error('No active session')
+      }
       
       const headers: HeadersInit = {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
       }
       
-      if (user) {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session) {
-          headers['Authorization'] = `Bearer ${session.access_token}`
-        }
-      }
-      
-      const url = new URL(API_ENDPOINTS.JOURNEY, window.location.origin)
-      if (anonUid) {
-        url.searchParams.set('anonUid', anonUid)
-      }
-      
-      const response = await fetch(url, { headers })
+      const response = await fetch(API_ENDPOINTS.JOURNEY, { headers })
       const data = await response.json()
       
       setMemories(data.memories || [])
       setConversations(data.conversations || [])
       
       // Fetch profile separately
-      const profileUrl = new URL(API_ENDPOINTS.PROFILE, window.location.origin)
-      if (anonUid) {
-        profileUrl.searchParams.set('anonUid', anonUid)
-      }
-      
-      const profileResponse = await fetch(profileUrl, { headers })
+      const profileResponse = await fetch(API_ENDPOINTS.PROFILE, { headers })
       const profileData = await profileResponse.json()
       
       if (profileData.profile) {
@@ -213,4 +205,8 @@ export default function JourneyPage() {
       </div>
     </div>
   )
+}
+
+export function JourneyPageWithAuth() {
+  return <JourneyPageContent />
 }

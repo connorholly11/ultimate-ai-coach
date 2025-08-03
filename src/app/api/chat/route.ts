@@ -1,4 +1,4 @@
-import { sbService } from '@/lib/supabase'
+import { sbService } from '@/lib/supabase/server'
 import { Anthropic } from '@anthropic-ai/sdk'
 import { checkRateLimit, checkSpendingCap } from '@/lib/rate-limit'
 import { buildSystemPrompt } from '@/lib/prompt'
@@ -43,10 +43,10 @@ export async function POST(req: NextRequest) {
     }
     
     // Check global spending cap
-    const { allowed: budgetAllowed, spent } = await checkSpendingCap()
+    const { allowed: budgetAllowed, spentMonth } = await checkSpendingCap()
     if (!budgetAllowed) {
       console.error(
-        `Spending cap reached — spent this month: $${spent.toFixed(2)} (limit: $${process.env.MONTHLY_SPEND_LIMIT})`
+        `Spending cap reached — spent this month: $${spentMonth.toFixed(2)} (limit: $${process.env.MONTHLY_SPEND_LIMIT})`
       )
       return new Response('Service temporarily unavailable due to high usage', { status: 503 })
     }

@@ -5,7 +5,6 @@ import type { ChatRequestBody, ChatResponseBody } from './chat'
 
 export interface GetQuestsQuery {
   type?: 'templates' | 'active' | 'all'
-  anonUid?: string
 }
 
 export interface GetQuestsResponse {
@@ -16,13 +15,11 @@ export interface GetQuestsResponse {
 export interface PostQuestBody {
   questTemplateId?: string
   customQuest?: Omit<QuestTemplate, 'id' | 'difficulty' | 'durationDays'>
-  anonUid?: string
 }
 
 export interface PatchQuestBody {
   progress?: ProgressMap
   status?: 'completed' | 'abandoned'
-  anonUid?: string
 }
 
 /* ---- /api/chat endpoint ---- */

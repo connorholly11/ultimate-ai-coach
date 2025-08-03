@@ -1,77 +1,64 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { sbBrowser } from '@/lib/supabase'
 
-export default function AuthCallback() {
+function AuthCallbackContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   
   useEffect(() => {
     const handleCallback = async () => {
       const supabase = sbBrowser()
       
-      // Get the session from the URL
-      const { data: { session }, error } = await supabase.auth.getSession()
+      // Get redirect URL from params or default to chat
+      const redirectTo = searchParams.get('redirect') || '/chat'
+      
+      // Handle the auth callback
+      const { error } = await supabase.auth.exchangeCodeForSession(window.location.href)
       
       if (error) {
         console.error('Auth callback error:', error)
-        router.push('/')
+        router.push('/?error=auth')
         return
       }
       
+      // Get the session
+      const { data: { session } } = await supabase.auth.getSession()
+      
       if (session) {
-        // Check if we have an anonymous UID to migrate
-        const anonUid = localStorage.getItem('purpose_uid')
-        
-        if (anonUid) {
-          // Call the upgrade endpoint to merge accounts
-          try {
-            // Get onboarding data before the API call
-            const onboardingData = localStorage.getItem('purpose_onboarding')
-            
-            const response = await fetch('/api/upgrade', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${session.access_token}`
-              },
-              body: JSON.stringify({
-                email: session.user.email,
-                anonUid,
-                onboardingData: onboardingData ? JSON.parse(onboardingData) : null
-              })
-            })
-            
-            if (response.ok) {
-              // Clear anonymous UID
-              localStorage.removeItem('purpose_uid')
-              if (onboardingData) {
-                // TODO: Save to user profile in database
-                console.log('TODO: Sync onboarding data to user profile')
-              }
-            }
-          } catch (error) {
-            console.error('Upgrade error:', error)
-          }
-        }
-        
-        // Redirect to chat
-        router.push('/chat')
+        // Successful auth - redirect to intended page
+        router.push(redirectTo)
       } else {
         router.push('/')
       }
     }
     
     handleCallback()
-  }, [router])
+  }, [router, searchParams])
   
   return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="text-center">
         <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-muted-foreground">Signing you in...</p>
+        <p className="text-muted-foreground">Completing sign in...</p>
       </div>
     </div>
+  )
+}
+
+export default function AuthCallback() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    }>
+      <AuthCallbackContent />
+    </Suspense>
   )
 }

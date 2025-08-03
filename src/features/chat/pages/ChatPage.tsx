@@ -1,12 +1,11 @@
 'use client'
 
-import { Chat } from '@/components/Chat'
-import { SaveProgressButton } from '@/components/SaveProgressButton'
-import { ChatProvider } from '@/contexts/ChatContext'
-import { SyncStatus } from '@/components/SyncStatus'
+import { ChatView } from '../components/ChatView'
+import { ChatProvider } from '../context/ChatContext'
+import { SyncStatus } from '../components/SyncStatus'
 import { Button } from '@/components/ui/button'
 import { RotateCcw } from 'lucide-react'
-import { useChat } from '@/contexts/ChatContext'
+import { useChat } from '../context/ChatContext'
 
 function ChatPageContent() {
   const { resetChat } = useChat()
@@ -21,7 +20,6 @@ function ChatPageContent() {
           </div>
           <h1 className="text-xl font-semibold text-gray-800">AI Coach</h1>
           <div className="flex items-center gap-2">
-            <SaveProgressButton />
             <Button
               variant="ghost"
               size="sm"
@@ -35,12 +33,12 @@ function ChatPageContent() {
       </div>
       
       {/* Chat Component */}
-      <Chat />
+      <ChatView />
     </div>
   )
 }
 
-export default function ChatPage() {
+export function ChatPage() {
   return (
     <ChatProvider>
       <ChatPageContent />

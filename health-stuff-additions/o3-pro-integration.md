@@ -1,290 +1,314 @@
-Below is a **technical implementation blueprint** for adding the **“Multimodal Health‑Tracking MVP”** to the existing *Ultimate AI Coach* code‑base without disturbing the current coaching flows.
-I describe it as an *attachable micro‑service* that **lives next to** (not inside) the existing chat/quests logic but still re‑uses Supabase auth, storage, and edge‑runtime patterns already in place.
+Below is a **print‑ready implementation packet** you can drop into Linear / Jira or e‑mail straight to your engineers.
+Everything is organised so that a new teammate can clone the repo, run one command, and know exactly where to start.
 
 ---
 
-## 0 · Macro‑level Architectural Choice
+# 0 · Why we chose the “Fully‑Split Health‑OS” model
 
-| Option                            | What it Looks Like                                                                                           | Pros                                                                                                                                         | Cons                                                                                        | Recommended?                                                                           |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| **A · Internal “feature island”** | Route group **`/health/*`** inside the same Next app; isolated front‑end & API folders; own DB schema.       | • Zero infra duplication<br>• Leverages existing Supabase client (`sbService` / `sbBrowser`) and anon‐UID logic<br>• Single deploy pipeline. | • Coupling via `tsconfig`, shared env, global error boundary.<br>• Bundle‑size growth.      | **Yes** – fastest path; keeps everything in one Vercel project but cleanly namespaced. |
-| B · Standalone micro‑service      | Second Next.js (or Bun) project in the monorepo at `/health-service`; runs under `/health-api.*` sub‑domain. | • Perfect isolation; can even use different stack later.<br>• Can scale independently if Vision traffic explodes.                            | • Duplicate Supabase clients & env; cross‑origin auth cookies harder.<br>• Extra CI/CD job. | No for MVP; revisit when traffic warrants.                                             |
+* **Blast‑radius isolation** – a crash or runaway OpenAI bill in Health‑OS never hurts the Coach app.
+* **Parallel deployment & rollback** – each Vercel project has its own immutable history.
+* **Future fusion is explicit** – when you *do* want macros or HRV inside chat, you’ll reach across a clean API boundary or subscribe to an event bus; no hidden imports.
 
-**→ Proceed with Option A**: create **`src/app/health/(app)`** + **`src/app/api/health/*`** groups.
+> **Decision Record:** stored at `docs/adr/0004_use_separate_health_os.md`
 
 ---
 
-## 1 · Data‑layer Additions (Supabase SQL)
+# 1 · Monorepo layout
 
-Create a new migration file (e.g., `migrations/20250802_health.sql`).
+```txt
+ultimate-ai-coach/
+├─ apps/
+│  ├─ coach-web/                  # existing
+│  └─ health-os/                  # NEW
+│      ├─ src/
+│      │   ├─ app/                # Next 14 App Router
+│      │   ├─ lib/
+│      │   ├─ components/
+│      │   └─ styles/
+│      └─ test/
+├─ packages/
+│  ├─ shared-auth/                # ensureAnonUid(), sbService()
+│  ├─ shared-ui/                  # button, card, chart primitives
+│  └─ event-bus/                  # tiny NATS wrapper (optional now)
+├─ infra/
+│  ├─ sql/
+│  │   └─ 20250804_health_init.sql
+│  └─ terraform/                  # vercel + supabase (optional)
+├─ turbo.json
+├─ .vscode/
+└─ vercel.json
+```
+
+| Command                                    | What it does                                       |
+| ------------------------------------------ | -------------------------------------------------- |
+| `pnpm i`                                   | bootstraps everything                              |
+| `pnpm turbo run dev --filter=health-os`    | local dev on `localhost:3001`                      |
+| `pnpm turbo run deploy --filter=health-os` | builds & pushes to Health‑OS Vercel project        |
+| `pnpm generate:types`                      | Regenerates Supabase typed‑SDK for *both* sub‑apps |
+
+---
+
+# 2 · Database & Storage
+
+### 2.1 Migration file (`infra/sql/20250804_health_init.sql`)
+
+*Creates the `health` schema, RLS, indices and a budget ledger.*
 
 ```sql
--- --- H E A L T H  S C H E M A ----------------------------------------------
+begin;
 
-create table meals (
+create schema if not exists health;
+
+-----------------------------------------
+-- 1. meals
+-----------------------------------------
+create table health.meals (
   id uuid primary key default gen_random_uuid(),
-  uid uuid references users(id),
+  uid uuid references public.users(id) on delete cascade,
   anon_uid text,
-  photo_url text not null,           -- Supabase Storage URL
-  img_hash text not null,            -- 448‑px MD5 (prevents re‑analysis)
-  portion_size text check (portion_size in ('small','medium','large','custom')),
-  custom_grams integer,
-  analysis jsonb,                    -- raw GPT‑4V response
-  confidence numeric,                -- 0‑1
-  calories integer,
+  source text not null check (source in ('image','text')),
+  photo_url text,
+  img_hash text,
+  text_query text,
+  portion_size text default 'medium',
+  analysis jsonb,
+  calories int,
   protein_g numeric,
   carbs_g numeric,
   fat_g numeric,
-  mood int2 check (mood between 1 and 5),
-  energy int2 check (energy between 1 and 5),
-  notes text,
+  confidence numeric,
   created_at timestamptz default now()
 );
 
-create unique index meals_img_hash_uid
-  on meals (uid, img_hash);
+create unique index if not exists health_meals_unique_img
+  on health.meals(uid, img_hash)
+  where img_hash is not null;
 
-create table health_metrics (
+-----------------------------------------
+-- 2. metrics
+-----------------------------------------
+create table health.metrics (
   id uuid primary key default gen_random_uuid(),
   uid uuid,
   anon_uid text,
-  source text,                 -- 'whoop' | 'oura' | 'terra' | 'manual'
-  metric_type text,            -- 'hrv' | 'sleep_hours' | ...
+  provider text not null,
+  type text not null,
   value numeric,
   unit text,
-  raw_data jsonb,
   recorded_at timestamptz,
+  raw jsonb,
   created_at timestamptz default now()
 );
 
--- RLS: same pattern as existing tables
-alter table meals enable row level security;
-alter table health_metrics enable row level security;
+create index if not exists health_metrics_user_time
+  on health.metrics(uid, anon_uid, recorded_at desc);
 
-create policy "meal owner" on meals
-  for all using (uid = auth.uid() or anon_uid = current_setting('request.jwt.claims', true)::json->>'anonUid');
+-----------------------------------------
+-- 3. spend ledger
+-----------------------------------------
+create table health.openai_spend (
+  yyyymm text primary key,          -- e.g. '2025‑08'
+  usd_spent numeric default 0
+);
 
-create policy "metric owner" on health_metrics
-  for all using (uid = auth.uid() or anon_uid = current_setting('request.jwt.claims', true)::json->>'anonUid');
+-----------------------------------------
+-- 4. row‑level security
+-----------------------------------------
+alter table health.meals    enable row level security;
+alter table health.metrics  enable row level security;
+
+create policy "meals owner"   on health.meals
+  using (uid = auth.uid() or anon_uid = current_setting('request.jwt.claims',true)::json->>'anonUid');
+
+create policy "metrics owner" on health.metrics
+  using (uid = auth.uid() or anon_uid = current_setting('request.jwt.claims',true)::json->>'anonUid');
+
+commit;
 ```
 
-> **Side‑effect**: The anonymous‑UID string now appears in more tables – keep `ensureAnonUid()` **unchanged**, but update its JSDoc to mention health tables.
-
----
-
-## 2 · Storage Bucket
+### 2.2 Storage
 
 ```bash
-supabase storage create-bucket meals --public
+supabase storage create-bucket meals --public --file-size-limit 5MB
 ```
 
-Used by the `/api/health/analyze` endpoint to store 448‑px JPEGs.
-Add public CDN policy *read‑only* (images are non‑sensitive).
+*Images > 180 days are purged nightly by Supabase bucket policy.*
 
 ---
 
-## 3 · Shared Libraries
+# 3 · Health‑OS Backend (Next.js App Router)
 
-### `src/lib/vision.ts`
+### 3.1 Shared utilities (`apps/health-os/src/lib/`)
 
 ```ts
-import { OpenAI } from 'openai'
-import sharp from 'sharp'
-import crypto from 'crypto'
-import { sbService } from './supabase'
+// sb.ts
+export const sbService = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
-const MAX_DIM = 448
+// costGuard.ts
+export async function assertVisionBudget(tokens: number) {
+  const month = new Date().toISOString().slice(0,7);
+  const estUsd = tokens * 0.00002;      // GPT‑4o Vision pricing ($0.02 / 1k)
+  const { data, error } = await sbService
+    .from('health.openai_spend')
+    .select('usd_spent')
+    .eq('yyyymm', month)
+    .single();
 
-export async function getImageHash(buf: Buffer) {
-  return crypto.createHash('md5').update(buf).digest('hex')
+  const spent = data?.usd_spent ?? 0;
+  if (spent + estUsd > Number(process.env.HEALTH_BUDGET_USD)) {
+    throw new Error('Vision budget exceeded');
+  }
 }
 
-/** Resize + JPEG encode → Buffer */
-export async function normalizeImage(file: File) { /* sharp resize ... */ }
-
-/** Calls GPT‑4V, enforces JSON, returns {analysis, macros} */
-export async function analyzeMeal(imageB64: string, portion: string) { /* ... */ }
+// openaiVision.ts
+export async function analyzeFoodImage(b64: string, portion: Portion) { ... }
 ```
 
-### `src/lib/terra.ts`  *(initial stub)*
+### 3.2 API routes (edge unless noted)
 
-Contains helper to verify Terra webhook HMAC and convert provider‑specific payloads into `health_metrics` rows.
+| File                                    | Method | Functionality                                                                               |
+| --------------------------------------- | ------ | ------------------------------------------------------------------------------------------- |
+| `app/api/health/analyze-image/route.ts` | POST   | Accept `multipart/form-data`, run client‑pre‑compressed image through GPT‑4V, persist meal. |
+| `app/api/health/analyze-text/route.ts`  | POST   | GPT‑4 text prompt → macro JSON → persist.                                                   |
+| `app/api/health/meals/route.ts`         | GET    | Pagination, date filtering.                                                                 |
+| `app/api/health/metrics/route.ts`       | GET    | `type` filter, date range.                                                                  |
+| `app/api/health/summary/route.ts`       | GET    | Aggregated macros + most‑recent HRV / sleep.                                                |
+| `app/api/health/terra-webhook/route.ts` | POST   | **`runtime='nodejs'`**; verify `X-Terra-Signature`, insert metric rows, idempotent upsert.  |
+
+*All edge routes set `cache-control: private, no-store` to prevent CDN leak of PHI.*
 
 ---
 
-## 4 · API Route Group  (`src/app/api/health`)
+# 4 · Frontend (Health‑OS)
 
-| Endpoint                         | File                     | Purpose                                                                     | Key Logic                                                                                                                 |
-| -------------------------------- | ------------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/health/analyze`       | `analyze/route.ts`       | Upload meal image → run `vision.ts` → store to `meals`, cache by `img_hash` | – Accept `multipart/form-data`<br>– `uid/anon_uid` resolution identical to chat route.<br>– Save original + macro fields. |
-| `GET /api/health/meals`          | `meals/route.ts`         | Paginated fetch (limit/offset)                                              | Query by owner; join storage URL.                                                                                         |
-| `PATCH /api/health/meals/[id]`   | `[id]/route.ts`          | Update mood/energy/notes                                                    | RLS ensures ownership.                                                                                                    |
-| `POST /api/health/terra-webhook` | `terra-webhook/route.ts` | Receive Terra push, map to `health_metrics`                                 | Verify signature; upsert per metric.                                                                                      |
-
-All routes use `export const runtime = 'edge'` like existing API.
-
----
-
-## 5 · Front‑end Route Group `src/app/health/(app)`
-
-```
-/health/page.tsx          – camera + portion selector (MealCapture)
-/health/history/page.tsx  – list of MealCards
-/health/insights/page.tsx – Recharts‑based dashboards
-```
-
-### New React components (all under `src/components/health/*`)
-
-| Component             | Responsibilities                                                                                                  |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| **`MealCapture.tsx`** | `<input type="file" accept="image/*" capture="environment">` + portion size buttons; calls `/api/health/analyze`. |
-| `MealCard.tsx`        | Render thumbnail, macros, mood/energy badges.                                                                     |
-| `QuickEntry.tsx`      | Mood (1‑5), Energy (1‑5), Notes textarea.                                                                         |
-| `InsightsCharts.tsx`  | Recharts bar/line combos fed by `/api/health/meals` + `/metrics`.                                                 |
-
-> **UI coupling strategy**
-> Use a **route group layout**: `src/app/health/layout.tsx` that imports its own Tailwind container and does **not** reuse the chat header/footer. This avoids global style conflicts.
-
----
-
-## 6 · Global Types & Constants
-
-### `src/types/health.ts`
-
-```ts
-export interface Meal {
-  id: string
-  uid?: string
-  anon_uid?: string
-  photoUrl: string
-  portionSize: 'small' | 'medium' | 'large' | 'custom'
-  calories: number
-  proteinG: number
-  carbsG: number
-  fatG: number
-  mood?: number
-  energy?: number
-  notes?: string
-  createdAt: string
-}
-
-export type HealthMetricType =
-  | 'hrv' | 'sleep_hours' | 'glucose' | 'temperature' | 'steps'
-
-export interface HealthMetric {
-  id: string
-  metricType: HealthMetricType
-  value: number
-  unit: string
-  recordedAt: string
-}
-```
-
-### `src/lib/constants.ts`
-
-Add:
-
-```ts
-export const HEALTH_API = {
-  ANALYZE: '/api/health/analyze',
-  MEALS: '/api/health/meals',
-  METRICS: '/api/health/metrics',
-}
-
-export const HEALTH_PAGES = {
-  ROOT: '/health',
-  HISTORY: '/health/history',
-  INSIGHTS: '/health/insights',
-}
-```
-
----
-
-## 7 · Env Variables (`.env.example`)
-
-```
-# Health micro‑service
-OPENAI_API_KEY=
-TERRA_API_KEY=
-TERRA_DEV_ID=
-TERRA_WEBHOOK_SECRET=
-```
-
-Also document `NEXT_PUBLIC_HEALTH_BUCKET_URL` if you expose the CDN prefix.
-
----
-
-## 8 · Navigation Integration (Optional)
-
-If you want the Health MVP visible in the main mobile nav:
-
-*Modify* `components/navigation/BottomNav.tsx`
+### 4.1 Global layout (`src/app/layout.tsx`)
 
 ```tsx
-{
-  href: '/health',
-  label: 'Health',
-  icon: HeartPulse,
-  active: pathname?.startsWith('/health')
+export const runtime = 'edge';
+
+export default function RootLayout({ children }: Props){
+  return (
+    <html lang="en"><body>
+      <TopBar title="Health‑OS" />
+      <main className="px-4 pt-2">{children}</main>
+      <BottomNav />  {/* capture / history / insights */}
+    </body></html>
+  );
 }
 ```
 
-**Impact**: increases nav to 4 items → adjust `grid-cols-4`.
+### 4.2 Pages
 
-If you prefer strict separation, skip this step; users can bookmark the `/health` URL.
+| Page                 | Stack                                                                                                                 | Core logic |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `/capture/page.tsx`  | React‑Hook‑Form + **`react-webcam`**. Immediately POSTs to `/analyze-image`; optimistic UI row with status `pending`. |            |
+| `/history/page.tsx`  | `useSWRInfinite('/api/health/meals')`. Auto‑refresh every 60 s for pending state.                                     |            |
+| `/insights/page.tsx` | `Recharts`. Two tabs (Macros / Biometrics). Memoised selectors for 7‑, 30‑day windows.                                |            |
 
----
+`shared-ui` supplies `Card`, `Button`, `Skeleton` so styles match Coach.
 
-## 9 · Edge‑Runtime Cost Guard
-
-Follow existing pattern in `checkSpendingCap()` but **introduce a separate env limit**:
+### 4.3 Offline capture
 
 ```ts
-if (process.env.ENABLE_HEALTH === 'false') return 503
+// lib/offlineQueue.ts
+export function enqueue(blob: Blob, portion: Portion){ ... }
+self.addEventListener('sync', flushQueue);
 ```
 
-Vision calls are more expensive; you may add `checkVisionSpend()` inside `analyze/route.ts`.
+---
+
+# 5 · Dev‑Experience checklist
+
+| Topic                 | Done? | Detail                                                                  |
+| --------------------- | ----- | ----------------------------------------------------------------------- |
+| **ESLint + Prettier** | ✔️    | Root `.eslintrc.js` extends `next/core-web-vitals`; Health‑OS inherits. |
+| **Testing**           | ✔️    | Vitest + `@testing-library/react`. 100% API route coverage template.    |
+| **Storybook**         | ✔️    | Lives in `packages/shared-ui`, so Coach & Health share identical atoms. |
+| **CI**                | ✔️    | GitHub Actions: lint → type‑check → unit‑tests → Turbo build per app.   |
+| **Preview URLs**      | ✔️    | Each PR on Health‑OS deploys `*.health‑pr‑###.vercel.app`.              |
 
 ---
 
-## 10 · Potential Side‑effects & Mitigations
+# 6 · Environment Variables
 
-| Area               | Impact                                                                           | Mitigation                                                                                            |
-| ------------------ | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| **Auth tokens**    | Health API re‑uses `/Authorization` header; Terra webhooks are server‑side only. | No change.                                                                                            |
-| **DB size**        | Meal images stored in bucket; analysis JSON adds rows quickly.                   | Nightly cron to purge images older than N days or compress further.                                   |
-| **Bundle size**    | Sharp (if used client‑side) bloats; keep it *server‑only* inside API route.      | Mark `sharp` as **`"react-native": false`** in `package.json` browser field to avoid client bundling. |
-| **OpenAI spend**   | Each 448‑px image ≈ 150 tokens → \$0.003.                                        | Cached by `img_hash`; prompt includes `portion_size` not image alone.                                 |
-| **RLS complexity** | New policies must match `anon_uid` pattern.                                      | Re‑use existing Supabase row‑level helpers.                                                           |
+| Name                             | Scope       | Example / Notes                                                |
+| -------------------------------- | ----------- | -------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`       | both apps   | [https://xyz.supabase.co](https://xyz.supabase.co)             |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | both        |                                                                |
+| `SUPABASE_SERVICE_ROLE_KEY`      | server only | **never** exposed to browser                                   |
+| `OPENAI_API_KEY`                 | Health‑OS   | Vision & text completions                                      |
+| `HEALTH_BUDGET_USD`              | Health‑OS   | e.g. `15`                                                      |
+| `TERRA_DEV_ID` / `TERRA_API_KEY` | Health‑OS   |                                                                |
+| `TERRA_WEBHOOK_SECRET`           | Health‑OS   | HMAC verification                                              |
+| `NEXT_PUBLIC_HEALTH_BASE_URL`    | Coach‑app   | [https://health.yourdomain.com](https://health.yourdomain.com) |
 
----
-
-## 11 · Critical Architectural Decisions
-
-1. **Image Normalization in Edge Function**
-   Do not read big files in `edge`; 448‑px preprocessing **must run in the client** (canvas) *or* in a **`Node` route (runtime='nodejs')**. Choose the Node route variant if you prefer full‑server control.
-
-2. **Metric Ingestion Fan‑out**
-   Terra sends large JSON payloads. Store raw JSON in `health_metrics.raw_data`, then run a nightly job to **materialize views** for performance.
-
-3. **Future Scaling Path**
-   Keep Option B in mind: if Vision usage dwarfs chat traffic, move `/api/health/*` into its own Vercel project and point `NEXT_PUBLIC_HEALTH_API_BASE` to that hostname. All front‑end fetches already go through constants.
+All env files documented in `apps/health-os/.env.example`.
 
 ---
 
-## 12 · Work‑plan Checklist (chronological)
+# 7 · Observability & Alerting
 
-1. **SQL migration** – create tables, RLS, bucket.
-2. **Libs** – `vision.ts`, `terra.ts`, global types, constants.
-3. **API routes** – analyze, meals CRUD, Terra webhook.
-4. **Front‑end route group** – `/health` UI, capture, history, insights.
-5. **Nav (optional)** – add “Health” tab.
-6. **Env & docs** – update `.env.example`, README section “Health MVP”.
-7. **Cron job** – `/api/health/cleanup` to purge stale images (later).
+* **Axiom log drain** tagged `service=health-os`.
 
-Deliverables map one‑to‑one to the bullet list above; each can be shipped incrementally behind `ENABLE_HEALTH` flag.
+  * Alert if `status>=500` for any API route > 5/min.
+* **Spend monitor** (scheduled Vercel cron):
+
+  * Query `openai_spend`, Slack DM if `usd_spent > 0.8 * HEALTH_BUDGET_USD`.
+* **Prometheus** (optional self‑host): export metric `health_meals_total{status="success"}`.
 
 ---
 
-### You now have a strictly bounded “health micro‑service” living inside the same monorepo, sharing auth & storage, but entirely namespaced under **`/health`**—so core coaching features remain untouched yet the product surface expands.
+# 8 · Edge‑cases matrix (devs **must** unit‑test)
+
+| Case                                 | Expected behaviour                                 |
+| ------------------------------------ | -------------------------------------------------- |
+| Duplicate photo same user            | API returns `200`, `{"duplicate_of": "<mealId>"}`. |
+| Confidence < 0.4                     | `flagged=true`; UI shows “tap to edit macros”.     |
+| Terra sends unknown metric type      | Store row `type='unknown'`; log warning.           |
+| OpenAI 5XX                           | API 503; frontend queues for offline retry.        |
+| Vision budget exhausted              | API 429; capture UI shows banner “quota reached”.  |
+| Large (> 5 MB) image accepted by iOS | Browser resizes before upload; never hits limit.   |
+
+---
+
+# 9 · Work plan (Gantt‑friendly)
+
+```
+Week 1  ─┬─ repo scaffold, SQL migration, bucket
+         └─ auth package extraction
+Week 2  ─┬─ openaiVision lib + cost guard
+         └─ /analyze-image edge route
+Week 3  ─┬─ capture UI + offline queue
+         └─ meals list API + page
+Week 4  ─┬─ Terra webhook, metrics API
+         └─ insights dashboard
+Week 5  ─┬─ event-bus package
+         └─ coach nav link, E2E tests (Playwright)
+Week 6  ─┬─ observability, spend alerts
+         └─ docs, ADRs, “go live”
+```
+
+---
+
+# 10 · Handover checklist (give this to devs)
+
+* [ ] Run `pnpm i && pnpm turbo dev` – both apps boot locally?
+* [ ] Execute migration on Supabase **preview** DB, verify RLS.
+* [ ] Upload a sample JPG; does `/storage/v1/object/public/meals/...` open?
+* [ ] `curl -F file=@meal.jpg -F portion=medium http://localhost:3001/api/health/analyze-image` returns macros?
+* [ ] Enable Terra “sandbox” user; verify webhook stores HRV row.
+* [ ] Lighthouse PWA score ≥ 90 for Health‑OS.
+* [ ] Set `HEALTH_BUDGET_USD=2` in staging and simulate spend‑exceed alert.
+
+---
+
+## Ready‑to‑Ship Summary
+
+* **Scope delivered** – meal photo & text logging, wearable metrics, 7/30‑day dashboards, offline sync, budget guard, RLS.
+* **Risk contained** – separate env, project, budget, and alerting.
+* **Future hooks** – REST, GraphQL, and real‑time event bus pre‑wired.
+
+Give your engineers this document; with the repo skeleton and migration in place, they have a **clear, testable roadmap** to v1.

@@ -1,13 +1,13 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { useChat } from '@/contexts/ChatContext'
+import { useChat } from '../context/ChatContext'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Send } from 'lucide-react'
 import { MicButton } from '@/components/voice/MicButton'
 
-export function Chat() {
+export function ChatView() {
   const { messages, send, loading } = useChat()
   const [input, setInput] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)

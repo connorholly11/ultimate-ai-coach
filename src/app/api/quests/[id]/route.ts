@@ -1,4 +1,4 @@
-import { sbService } from '@/lib/supabase'
+import { sbService } from '@/lib/supabase/server'
 import { NextResponse, NextRequest } from 'next/server'
 import { scoreAssessment } from '@/lib/scoring'
 import { assessmentTypeMap } from '@/lib/assessment-templates'

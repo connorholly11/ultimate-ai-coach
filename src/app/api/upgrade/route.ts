@@ -1,4 +1,4 @@
-import { sbService } from '@/lib/supabase'
+import { sbService } from '@/lib/supabase/server'
 import { getAuthUser, authError } from '@/lib/auth-helpers'
 import type { NextRequest } from 'next/server'
 

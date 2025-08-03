@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { Welcome } from './Welcome'
 import { GoalSetting } from './GoalSetting'
 import { PersonalityChoice } from './PersonalityChoice'
-import { ensureAnonUid } from '@/lib/identity'
 
 type OnboardingStep = 'welcome' | 'goals' | 'personality'
 
@@ -24,7 +23,6 @@ export function OnboardingFlow() {
   
   const handlePersonalityNext = async (personality: string) => {
     // Save to localStorage
-    ensureAnonUid() // Ensure anonymous UID is created
     const onboardingData = {
       goals: userData.goals,
       personality,
@@ -32,9 +30,6 @@ export function OnboardingFlow() {
     }
     
     localStorage.setItem('purpose_onboarding', JSON.stringify(onboardingData))
-    
-    // TODO: Save to database when user upgrades
-    // For now, just store locally
     
     // Navigate to chat
     router.push('/chat')

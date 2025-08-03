@@ -50,7 +50,6 @@ export const API_ENDPOINTS = {
 // Local storage keys
 export const STORAGE_KEYS = {
   ONBOARDING: 'purpose_onboarding',
-  ANON_UID: 'purpose_uid',
   MESSAGES: 'purpose_messages',
   EPISODE_ID: 'purpose_episode_id'
 } as const

@@ -7,8 +7,9 @@ import { GoalSetting } from './GoalSetting'
 import { PersonalityChoice } from './PersonalityChoice'
 import { ValuesRankingStep } from './ValuesRankingStep'
 import { FTUEProvider, useFTUE } from '@/contexts/FTUEContext'
-import { ensureAnonUid } from '@/lib/identity'
 import { STORAGE_KEYS, API_ENDPOINTS } from '@/lib/constants'
+import { useSession } from '@/hooks/useSession'
+import { sbBrowser } from '@/lib/supabase'
 import type { FTUEData } from '@/types/auth'
 
 type FTUEStep = 'welcome' | 'goals' | 'personalityStyle' | 'valuesRanking' | 'done'
@@ -17,6 +18,7 @@ function FTUEFlowContent() {
   const [step, setStep] = useState<FTUEStep>('welcome')
   const [isLoading, setIsLoading] = useState(false)
   const { data, updateData } = useFTUE()
+  const { user } = useSession()
   const router = useRouter()
   
   const handleGoalsNext = (goals: string) => {
@@ -35,9 +37,6 @@ function FTUEFlowContent() {
       // Update context
       updateData({ valuesRanking: values })
       
-      // Ensure anonymous UID is created
-      const anonUid = ensureAnonUid()
-      
       // Prepare complete FTUE data
       const ftueData: FTUEData = {
         goals: data.goals || '',
@@ -49,12 +48,27 @@ function FTUEFlowContent() {
       // Save to localStorage
       localStorage.setItem(STORAGE_KEYS.ONBOARDING, JSON.stringify(ftueData))
       
-      // Save to server
-      await fetch(API_ENDPOINTS.PROFILE, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile: ftueData, anonUid })
-      })
+      // Save to server if authenticated
+      if (user) {
+        try {
+          const supabase = sbBrowser()
+          const { data: { session } } = await supabase.auth.getSession()
+          
+          if (session) {
+            await fetch(API_ENDPOINTS.PROFILE, {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`
+              },
+              body: JSON.stringify({ profile: ftueData })
+            })
+          }
+        } catch (error) {
+          console.error('Failed to save FTUE data to server:', error)
+          // Continue anyway, data is saved locally
+        }
+      }
       
       // Navigate to chat
       router.push('/chat')

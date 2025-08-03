@@ -1,8 +1,14 @@
-import { sbService } from './supabase'
+import { sbService } from './supabase/server'
 
 interface RateLimitConfig {
   maxRequests: number
   windowMs: number
+}
+
+interface SpendingCapResult {
+  allowed: boolean
+  spentMonth: number
+  spentDay: number
 }
 
 // const COST_PER_MESSAGE   = parseFloat(process.env.COST_PER_MESSAGE   || '0.003') // $/msg
@@ -37,7 +43,7 @@ export async function checkRateLimit(
 }
 
 // Check global spending cap
-export async function checkSpendingCap(): Promise<{ allowed: boolean; spent: number }> {
+export async function checkSpendingCap(): Promise<SpendingCapResult> {
   const supabase = sbService()
 
   // Fetch total dollars spent this month and today via dedicated SQL functions.
@@ -56,7 +62,7 @@ export async function checkSpendingCap(): Promise<{ allowed: boolean; spent: num
 
   // Fail-open on any error by allowing the request.
   if (monthError || dayError || monthData === null || dayData === null) {
-    return { allowed: true, spent: 0 }
+    return { allowed: true, spentMonth: 0, spentDay: 0 }
   }
 
 // Supabase RPCs return a single numeric column named "total_cost".
@@ -84,10 +90,9 @@ export async function checkSpendingCap(): Promise<{ allowed: boolean; spent: num
 
   return {
     allowed,
-    spent: spentMonth,
-    spentDay,
-    spentMonth
-  } as unknown as { allowed: boolean; spent: number }
+    spentMonth,
+    spentDay
+  }
 }
 
 // Clean up old entries periodically

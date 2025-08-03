@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sbService } from '@/lib/supabase'
+import { sbService } from '@/lib/supabase/server'
 import { getAuthUser, authError } from '@/lib/auth-helpers'
 
 export const runtime = 'edge'

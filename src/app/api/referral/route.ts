@@ -1,27 +1,48 @@
-import { sbService } from '@/lib/supabase'
+import { sbService } from '@/lib/supabase/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { getAuthUser, authError } from '@/lib/auth-helpers'
 
 export const runtime = 'edge'
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const { uid, ref } = await req.json()
+    // Require authentication
+    const user = await getAuthUser(req)
+    if (!user) return authError()
     
-    if (!uid) {
-      return new Response('UID required', { status: 400 })
-    }
+    const { ref } = await req.json()
     
     const supabase = sbService()
+    
+    // Check if user already has a referrer set to prevent tampering
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('referrer_uid')
+      .eq('uid', user.id)
+      .single()
+    
+    // Only allow setting referrer if not already set
+    if (existingUser?.referrer_uid) {
+      return NextResponse.json(
+        { error: 'Referrer already set' },
+        { status: 409 }
+      )
+    }
+    
     await supabase.from('users').upsert(
       { 
-        uid, 
+        uid: user.id, 
         referrer_uid: ref ?? null 
       }, 
       { onConflict: 'uid' }
     )
     
-    return new Response(null, { status: 204 })
+    return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Referral error:', error)
-    return new Response('Internal error', { status: 500 })
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
   }
 }

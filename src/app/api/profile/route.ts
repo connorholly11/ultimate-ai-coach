@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sbService } from '@/lib/supabase'
+import { sbService } from '@/lib/supabase/server'
 import type { FTUEData } from '@/types/auth'
 import { getAuthUser, authError } from '@/lib/auth-helpers'
 

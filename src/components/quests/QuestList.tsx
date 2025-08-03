@@ -6,7 +6,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Info } from 'lucide-react'
 import { useSession } from '@/hooks/useSession'
-import { ensureAnonUid } from '@/lib/identity'
 import { sbBrowser } from '@/lib/supabase'
 import type { QuestTemplate, UserQuest } from '@/types'
 
@@ -32,27 +31,24 @@ export function QuestList() {
   const { user } = useSession()
   
   const fetchQuests = useCallback(async () => {
+    if (!user) {
+      throw new Error('Authentication required to fetch quests')
+    }
+    
     try {
       const supabase = sbBrowser()
-      const anonUid = user ? undefined : ensureAnonUid()
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        throw new Error('No active session')
+      }
       
       const headers: HeadersInit = {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
       }
       
-      if (user) {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session) {
-          headers['Authorization'] = `Bearer ${session.access_token}`
-        }
-      }
-      
-      const url = new URL('/api/quests', window.location.origin)
-      if (anonUid) {
-        url.searchParams.set('anonUid', anonUid)
-      }
-      
-      const response = await fetch(url, { headers })
+      const response = await fetch('/api/quests', { headers })
       const data = await response.json()
       
       setTemplates(data.templates || [])
@@ -69,27 +65,28 @@ export function QuestList() {
   }, [fetchQuests])
   
   const startQuest = async (templateId: string) => {
+    if (!user) {
+      throw new Error('Authentication required to start quest')
+    }
+    
     try {
       const supabase = sbBrowser()
-      const anonUid = user ? undefined : ensureAnonUid()
+      const { data: { session } } = await supabase.auth.getSession()
       
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json'
+      if (!session) {
+        throw new Error('No active session')
       }
       
-      if (user) {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session) {
-          headers['Authorization'] = `Bearer ${session.access_token}`
-        }
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
       }
       
       const response = await fetch('/api/quests', {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          questTemplateId: templateId,
-          anonUid
+          questTemplateId: templateId
         })
       })
       
@@ -102,27 +99,28 @@ export function QuestList() {
   }
   
   const updateQuest = async (questId: string, progress: Record<string, boolean | number>) => {
+    if (!user) {
+      throw new Error('Authentication required to update quest')
+    }
+    
     try {
       const supabase = sbBrowser()
-      const anonUid = user ? undefined : ensureAnonUid()
+      const { data: { session } } = await supabase.auth.getSession()
       
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json'
+      if (!session) {
+        throw new Error('No active session')
       }
       
-      if (user) {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session) {
-          headers['Authorization'] = `Bearer ${session.access_token}`
-        }
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
       }
       
       await fetch(`/api/quests/${questId}`, {
         method: 'PATCH',
         headers,
         body: JSON.stringify({
-          progress,
-          anonUid
+          progress
         })
       })
       
@@ -136,27 +134,28 @@ export function QuestList() {
   }
   
   const completeQuest = async (questId: string) => {
+    if (!user) {
+      throw new Error('Authentication required to complete quest')
+    }
+    
     try {
       const supabase = sbBrowser()
-      const anonUid = user ? undefined : ensureAnonUid()
+      const { data: { session } } = await supabase.auth.getSession()
       
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json'
+      if (!session) {
+        throw new Error('No active session')
       }
       
-      if (user) {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session) {
-          headers['Authorization'] = `Bearer ${session.access_token}`
-        }
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
       }
       
       const response = await fetch(`/api/quests/${questId}`, {
         method: 'PATCH',
         headers,
         body: JSON.stringify({
-          status: 'completed',
-          anonUid
+          status: 'completed'
         })
       })
       
@@ -169,27 +168,24 @@ export function QuestList() {
   }
   
   const abandonQuest = async (questId: string) => {
+    if (!user) {
+      throw new Error('Authentication required to abandon quest')
+    }
+    
     try {
       const supabase = sbBrowser()
-      const anonUid = user ? undefined : ensureAnonUid()
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        throw new Error('No active session')
+      }
       
       const headers: HeadersInit = {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
       }
       
-      if (user) {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session) {
-          headers['Authorization'] = `Bearer ${session.access_token}`
-        }
-      }
-      
-      const url = new URL(`/api/quests/${questId}`, window.location.origin)
-      if (anonUid) {
-        url.searchParams.set('anonUid', anonUid)
-      }
-      
-      const response = await fetch(url, {
+      const response = await fetch(`/api/quests/${questId}`, {
         method: 'DELETE',
         headers
       })

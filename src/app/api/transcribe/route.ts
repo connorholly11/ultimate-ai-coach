@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { MODEL_IDS } from '@/lib/constants'
+import { getAuthUser, authError } from '@/lib/auth-helpers'
 
 export const runtime = 'edge'
 
@@ -10,6 +11,10 @@ interface TranscriptionResponse {
 
 export async function POST(req: NextRequest) {
   try {
+    // Require authentication
+    const user = await getAuthUser(req)
+    if (!user) return authError()
+    
     const formData = await req.formData()
     const audioFile = formData.get('audio') as Blob
     

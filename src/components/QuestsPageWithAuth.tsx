@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
-export default function QuestsPage() {
+export function QuestsPageWithAuth() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b">
@@ -19,7 +19,7 @@ export default function QuestsPage() {
           <h1 className="text-xl font-semibold">Quests</h1>
         </div>
       </header>
-      
+
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
           <div className="mb-8">
@@ -28,7 +28,7 @@ export default function QuestsPage() {
               Take on challenges to build better habits and achieve your goals. Complete quests to earn points and track your progress.
             </p>
           </div>
-          
+
           <QuestList />
         </div>
       </main>

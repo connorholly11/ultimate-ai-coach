@@ -8,7 +8,6 @@ export interface ChatMessage {
 
 export interface ChatRequestBody {
   message: string
-  anonUid?: string
   episodeId?: string
   reset?: boolean
   /** 'supportive' | 'motivational' | & | 'default' */

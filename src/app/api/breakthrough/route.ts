@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Anthropic } from '@anthropic-ai/sdk'
-import { sbService } from '@/lib/supabase'
+import { sbService } from '@/lib/supabase/server'
 import { buildBreakthroughPrompt } from '@/lib/prompt'
 import { MODEL_IDS } from '@/lib/constants'
 import { getAuthUser, authError } from '@/lib/auth-helpers'
